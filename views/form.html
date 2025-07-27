@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Upload Form</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <center>
+    <h1>Upload Your Data</h1>
+    <form action="/submit" method="POST" enctype="multipart/form-data">
+      <input type="text" name="data" placeholder="Enter your data" required><br><br>
+      <input type="file" name="image" required><br><br>
+      <button type="submit">Submit</button>
+    </form>
+  </center>
+</body>
+</html>

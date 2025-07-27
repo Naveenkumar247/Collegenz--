@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Collegenz</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background-color: #f3f3f3;
+    }
+
+    header {
+      background-color: white;
+      padding: 15px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    header h1 {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    header input[type="text"] {
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    main {
+      display: flex;
+    }
+
+    .content {
+      flex: 1;
+      padding: 20px;
+    }
+
+    .card {
+      background-color: white;
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card h2 {
+      font-size: 18px;
+      margin-bottom: 5px;
+    }
+
+    .card p {
+      font-size: 14px;
+      color: gray;
+    }
+
+    .card button {
+      margin-top: 8px;
+      padding: 6px 12px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .card button:hover {
+      background-color: #0056b3;
+    }
+
+    .icon {
+      font-size: 36px;
+    }
+
+    .sidebar {
+      width: 50px;
+      padding: 20px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .sidebar button {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .post {
+      background-color: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <h1>CollegenZ</h1>
+    <input type="text" placeholder="Search...">
+  </header>
+
+  <main>
+    <!-- Main Content -->
+    <div class="content">
+      <!-- Join With Us Section -->
+      <div class="card">
+        <div>
+          <h2>Join with us</h2>
+          <p>Represent your college with us</p>
+          <button>Join Now</button>
+        </div>
+        <div class="icon">👤➕</div>
+      </div>
+
+      <!-- Posts -->
+      <div class="post">
+        <p>Post content goes here...</p>
+      </div>
+      <div class="post">
+        <p>Another post content...</p>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <button title="Settings">⚙️</button>
+      <button title="Saved">🔖</button>
+      <button title="Feed">📄</button>
+      <button title="Home">🏠</button>
+    </div>
+  </main>
+  <div>
+    <center>
+    <h1>Upload Data</h1>
+  <form action="/submit" method="POST" enctype="multipart/form-data">
+    <input type="file" name="image" required /><br />
+    <input type="text" name="data" placeholder="Enter your data" required /><br />
+    <button type="submit">Submit</button>
+    </center>
+  </form>
+  </div>
+</body>
+</html>
