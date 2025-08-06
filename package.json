@@ -7,7 +7,7 @@
   "type": "commonjs",
   "main": "data.js",
   "scripts": {
-     "start": "node data2.js"
+     "start": "node data2.js",
      "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
