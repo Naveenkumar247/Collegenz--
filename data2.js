@@ -30,15 +30,9 @@ mongoose.connect(uri, {
 }).catch((err) => {
   console.error('❌ Connection error:', err.message);
 });
+  
 
-// User Schema                                                                                                                       const userSchema = new mongoose.Schema({
-
-const userSchema = new mongoose.Schema({
-  email: String,
-  password: String
-});
-
-
+//UserSchena
 
 
 
@@ -65,7 +59,7 @@ const AdminSchema = new mongoose.Schema({
   imageurl: String,
   createdAt: { type: Date, default: Date.now }
 });
-const User = mongoose.model("User", AdminSchema);
+const User = mongoose.model("Users", AdminSchema);
 
 
 
@@ -94,9 +88,12 @@ router.post("/submit", upload.single("image"), async (req, res) => {
 
 
 
+const userSchema = new mongoose.Schema({
+  email: String,
+  password: String
+});
 
-
-const entry = mongoose.model("email", userSchema);
+const entry = mongoose.model("emails", userSchema);
 
 // Routes
 
@@ -118,16 +115,17 @@ app.get("/submit",(req,res) => {
 
 
 // Signup Route
-app.post("/signup", async (req, res) => {                                                                                                const { email, password } = req.body;
+app.post("/signup", async (req, res) => { 
+    const { email, password } = req.body;
     try {
         const existingUser = await entry.findOne({ email });
         if (existingUser) {
-            return res.send("User already exists!");
+            return res.redirect("/view");
         }
         const hashedPassword = await bcryptjs.hash(password, 10);
-        const user = new User({ email, password: hashedPassword });
+        const user = new entry({ email, password: hashedPassword });
         await user.save();
-        res.send("Signup successful!");
+        res.redirect("/view");
     } catch (err) {
         console.error(err);
         res.status(500).send("Error signing up");
