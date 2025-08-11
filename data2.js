@@ -228,7 +228,7 @@ router.get("/view", async (req, res) => {
             <div>
               <h2>Join with us</h2>
               <p>Represent your college with us</p>
-              <button class="btnbtn-primary">Join Now</button>
+              <button class="btnbtn-primary" href°>Join Now</button>
             </div>
             <div style="font-size: 2rem;">👤➕</div>
           </div>
@@ -239,7 +239,10 @@ router.get("/view", async (req, res) => {
           <button  title="Settings">⚙️</button>
           <button title="Saved">🔖</button>
           <button title="Feed">📄</button>
-          <button href="/view" title="Home">🏠</button>
+          <button href="/view" title="Home"🏠</button>
+          <button>
+  <img src="/assets/IMG_20240902_200807.png"  alt="Icon" width="30" height="30">
+</button>
         </div>
       </main>
     </body>
