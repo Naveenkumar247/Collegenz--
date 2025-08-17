@@ -66,7 +66,7 @@ const User = mongoose.model("Users", AdminSchema);
 
 
 // POST form handler
-router.post("/submit", upload.single("image"), async (req, res) => {
+router.post("/submit", upload.single("imageurl"), async (req, res) => {
   const { data } = req.body;
   const imageurl = req.file?.filename;
 
@@ -112,7 +112,9 @@ app.get("/login", (req, res) => {
 app.get("/submit",(req,res) => {
     res.sendFile(path.join(__dirname, "form.html"));
 });
-
+app.get("/upload",(req,res) => {
+    res.sendFile(path.join(__dirname, "upload.html"));
+});
 
 // Signup Route
 app.post("/signup", async (req, res) => { 
@@ -212,6 +214,9 @@ router.get("/view", async (req, res) => {
           background-color:#228B22;
           color:white;
         }
+       .icon{
+          margin-top:2050px;
+       }
 
       </style>
     </head>
@@ -236,13 +241,20 @@ router.get("/view", async (req, res) => {
 
         <!-- Sidebar -->
         <div class="sidebar">
-          <button  title="Settings">⚙️</button>
-          <button title="Saved">🔖</button>
-          <button title="Feed">📄</button>
-          <button href="/view" title="Home"🏠</button>
-          <button>
-  <img src="/assets/IMG_20240902_200807.png"  alt="Icon" width="30" height="30">
-</button>
+        <div class="icon">
+          <a href='/upload'>
+  <img src="assets/home.png"  alt="Icon" width="30" height="30">
+</a>
+          <a href='/upload'>
+  <img src="assets/home.png"  alt="Icon" width="30" height="30">
+</a>
+          <a href='/upload'>
+  <img src="assets/home.png"  alt="Icon" width="30" height="30">
+</a> 
+          <a href='/upload'>
+  <img src="assets/home.png"  alt="Icon" width="30" height="30">
+</a>
+        </div>
         </div>
       </main>
     </body>
