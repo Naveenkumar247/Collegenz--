@@ -71,10 +71,13 @@ const post = mongoose.model("Users", AdminSchema);
 
 // User Schema (common for both normal + Google login)
 const userSchema = new mongoose.Schema({
+
+  name: { type: String, required: true },
+  age: { type: Number, required: true },
+  phone: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  
-  // For normal login
-  password: { type: String }, // bcrypt hash stored
+  password: { type: String, required: true }, // ⚡ hash later with bcrypt
+  dream: { type: String, required: true, enum: ["Doctor", "Engineering", "Lawyer", "Entertainment & Arts", "Developer"] },
 
   // For Google login
   googleId: { type: String }, // Google unique user ID
@@ -83,52 +86,6 @@ const userSchema = new mongoose.Schema({
 });
 
 const genz  = mongoose.model("logins", userSchema);
-
-
-
-// Verify Google Token and Save User
-/*router.post("/verify-token", async (req, res) => {
-  try {
-    const { token } = req.body;
-    if (!token) {
-      return res.status(400).json({ error: "Token required" });
-    }
-
-    // Verify the token with Google
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: "544793130820-9r6d2rv2lcrt3sad31mfk1spcp3gdff7.apps.googleusercontent.com", // replace with your client id
-    });
-
-    const payload = ticket.getPayload();
-    if (!payload) {
-      return res.status(401).json({ error: "Invalid token" });
-    }
-
-    // Check if user already exists
-    let user = await entry.findOne({ email: payload.email });
-
-    if (!user) {
-      // Save new Google user
-      user = new genz({
-        email: payload.email,
-        picture: payload.picture,
-        createdAt: new Date(),
-      });
-      await user.save();
-    }
-
-    // Set session or send JWT
-    req.session.userEmail = user.email;
-    return res.status(200).json({ message: "Login successful", user });
-
-  } catch (error) {
-    console.error("Token verification failed:", error);
-    return res.status(401).json({ error: "Invalid token" });
-  }
-});*/
-
-
 
 
 
@@ -184,13 +141,13 @@ app.get("/upload",(req,res) => {
 
 
 router.post("/signin", async (req, res) => {
-  const { email, password } = req.body;
+  const { name,age,phone,email, password,dream } = req.body;
   try {
     const existingUser = await genz.findOne({ email });
     if (existingUser) return res.redirect("/login");
 
     const hashedPassword = await bcryptjs.hash(password, 10);
-    const user = new genz({ email, password: hashedPassword });
+    const user = new genz({ name, age, phone,email, password: hashedPassword, dream});
     await user.save();
 
     res.redirect("/view");
@@ -200,49 +157,10 @@ router.post("/signin", async (req, res) => {
   }
 });
 
-router.post("/create-post", async (req, res) => {
-  try {
-    if (!req.session.userEmail) {
-      return res.status(401).send("Unauthorized. Please log in.");
-    }
-
-    const newPost = new Post({
-      title: req.body.title,
-      content: req.body.content,
-      userEmail: req.session.userEmail  // store logged in user's email
-    });
-
-    await newPost.save();
-    res.redirect("/view");
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error creating post");
-  }
-});
-
-// Login Route
-/*router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await genz.findOne({ email });
-    if (!user || !user.password)
-      return res.status(400).send("User not found");
-
-    const isMatch = await bcryptjs.compare(password, user.password);
-    if (!isMatch) return res.status(400).send("Invalid credentials");
-    
-    req.session.userId = genz._id;
-    req.session.userEmail = genz.email;
-    res.redirect("/view");
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error logging in");
-  }
-});*/
-
 
 // Session Schema
 const SessionSchema = new mongoose.Schema({
+  name:{type: String, required:true },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "genz", required: true }, // adjust model name if different
   email: { type: String, required: true },
   sessionId: { type: String, required: true },
@@ -272,9 +190,10 @@ router.post("/login", async (req, res) => {
     // Save user info in express-session
     req.session.userId = user._id;
     req.session.userEmail = user.email;
-
+    req.session.username = user.name
     // Save session info in MongoDB
     const newSession = new Session({
+      name:user.name,
       userId: user._id,
       email: user.email,
       sessionId: req.sessionID, // provided by express-session
@@ -328,23 +247,16 @@ router.get("/view", async (req, res) => {
            background: #f1f1f1;      /* dark like Instagram */
            display: flex;
            flex-direction: column;
-           justify-content: space-between; /* pushes last button to bottom */
+           /*justify-content: space-between; /* pushes last button to bottom */
            align-items: center;
            padding: 1rem 0;
            position: fixed;       /* always visible */
            top: 0;
            right: 0;
+           gap:2.5rem;
            height: 100vh;         /* full height */
            z-index: 1000;
          }
-
-        .sidebar icon {
-           display: flex;
-           flex-direction: column;
-           gap: 1.5rem;
-           align-items: center;
-  
-         }    
         header {
           background-color: #228B22;
           color: white;
@@ -375,7 +287,7 @@ router.get("/view", async (req, res) => {
           <!-- Join With Us Section -->
           <div class="card mb-4 p-3 d-flex flex-row justify-content-between align-items-center">
             <div>
-              <h2>Hi${login.email}</h2>
+              <h2>Hi ${login.name}</h2>
               <p>Represent your college with us</p>
               <button class="btnbtn-primary" href°>Join Now</button>
             </div>
@@ -388,16 +300,16 @@ router.get("/view", async (req, res) => {
 <div class="sidebar">
   <div class="icon">
     <a href="/upload">
-      <img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="30" height="30">
+      <img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="50" height="50">
     </a>
     <a href="/upload">
-      <img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="30" height="30">
+      <img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="50" height="50">
     </a>
     <a href="/upload">
-      <img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="30" height="30">
+      <img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="50" height="50">
     </a>
     <a href="/upload">
-      <img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="30" height="30">
+      <img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="50" height="50">
     </a>
   </div>
 </div>
@@ -409,10 +321,10 @@ router.get("/view", async (req, res) => {
 
 user.forEach(user => {
   html += `
-    <center>
+    <center><br>
       <!-- Bootstrap CDN for styling -->
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-      <strong>${user.userEmail}</strong><br>
+      <strong>${user.userEmail}</strong>
 
 
       <div class="card mb-3 p-3">
@@ -420,7 +332,13 @@ user.forEach(user => {
       </div>
       <div>
       <p>${user.data}</p>
-    </center></div>`;
+    </div>
+
+    <!-- Like & Save buttons -->
+<div style="margin-top:10px;">
+  <button class="btn btn-success btn-sm">👍 Like</button>
+  <button class="btn btn-outline-primary btn-sm">💾 Save</button>
+</div></center><br>`;
 });
 
 html += "</div>";

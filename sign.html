@@ -57,6 +57,36 @@
         <img src="https://cdn-icons-png.flaticon.com/512/847/847969.png" alt="User Icon">
         <h4 class="mb-3">Sign Up</h4>
         <form method="POST" action="/signin">
+            <!-- Name -->
+  <div class="position-relative mb-3">
+    <i class="bi bi-person input-icon"></i>
+    <input type="text" name="name" class="form-control" placeholder="Full Name" required>
+  </div>
+
+  <!-- Age -->
+  <div class="position-relative mb-3">
+    <i class="bi bi-calendar input-icon"></i>
+    <input type="number" name="age" class="form-control" placeholder="Age" min="1" required>
+  </div>
+
+  <!-- Phone Number -->
+  <div class="position-relative mb-3">
+    <i class="bi bi-telephone input-icon"></i>
+    <input type="tel" name="phone" class="form-control" placeholder="Phone Number" required>
+  </div>
+
+  <!-- Dream (Dropdown) -->
+  <div class="position-relative mb-3">
+    <i class="bi bi-star input-icon"></i>
+    <select name="dream" class="form-control" required>
+      <option value="" disabled selected>Select Your Dream</option>
+      <option value="Doctor">Doctor</option>
+      <option value="Engineering">Engineering</option>
+      <option value="Lawyer">Lawyer</option>
+      <option value="Entertainment & Arts">Entertainment & Arts</option>
+      <option value="Developer">Developer</option>
+    </select>
+  </div>
             <!-- Email -->
             <div class="position-relative">
                 <i class="bi bi-envelope input-icon"></i>
