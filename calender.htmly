@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Calendar</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; }
+    #calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 20px; }
+    .weekday { font-weight: bold; background: #f2f2f2; padding: 8px; border: 1px solid #ddd; }
+    .day { min-height: 80px; border: 1px solid #ddd; padding: 4px; text-align: left; vertical-align: top; }
+    .empty { border: 1px solid transparent; }
+    .event { display: block; background: #4caf50; color: #fff; font-size: 12px; margin-top: 4px; padding: 2px; border-radius: 4px; }
+    .event-item { margin: 10px 0; padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: left; }
+    button { margin: 10px; padding: 6px 12px; }
+  </style>
+</head>
+<body>
+  <h2>📅 My Calendar</h2>
+  <button id="prev">← Prev</button>
+  <span id="month-label"></span>
+  <button id="next">Next →</button>
+
+  <div id="calendar"></div>
+
+  <h2>Saved Events</h2>
+  <div id="eventList"></div>
+
+  <script>
+    const calendarEl = document.getElementById("calendar");
+    const eventListEl = document.getElementById("eventList");
+    const monthLabel = document.getElementById("month-label");
+    const prevBtn = document.getElementById("prev");
+    const nextBtn = document.getElementById("next");
+
+    let events = [];
+    let currentYear, currentMonth;
+
+    async function fetchEvents() {
+      try {
+        const res = await fetch("/api/events"); // backend should return array of events
+        events = await res.json();
+        buildCalendar();
+      } catch (err) {
+        console.error("Failed to load events:", err);
+      }
+    }
+
+    function buildCalendar() {
+      const monthNames = [
+        "January","February","March","April","May","June",
+        "July","August","September","October","November","December"
+      ];
+      monthLabel.textContent = `${monthNames[currentMonth]} ${currentYear}`;
+
+      // Reset calendar grid
+      calendarEl.innerHTML = "";
+
+      // Add weekday headers
+      const weekdays = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+      weekdays.forEach(d => {
+        calendarEl.innerHTML += `<div class="weekday">${d}</div>`;
+      });
+
+      // Figure out first day & total days
+      const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+      const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+      // Empty slots before start
+      for (let i = 0; i < firstDay; i++) {
+        calendarEl.innerHTML += `<div class="empty"></div>`;
+      }
+
+      // Days of the month
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+        // Find events on this date
+        let eventHTML = "";
+        events.forEach(ev => {
+          if (ev.eventDate) {
+            const evDate = new Date(ev.eventDate).toISOString().slice(0, 10);
+            if (evDate === dateStr) {
+              eventHTML += `<span class="event">${ev.title}</span>`;
+            }
+          }
+        });
+
+        calendarEl.innerHTML += `<div class="day"><div>${day}</div>${eventHTML}</div>`;
+      }
+
+      // Saved Events list below
+      eventListEl.innerHTML = "";
+      if (events.length === 0) {
+        eventListEl.innerHTML = "<p>📌 No events saved yet.</p>";
+      } else {
+        events.forEach(ev => {
+          eventListEl.innerHTML += `
+            <div class="event-item">
+              <strong>${ev.title}</strong><br>
+              <small>${ev.eventDate ? new Date(ev.eventDate).toDateString() : "No date"}</small><br>
+              <p>${ev.description || "No description"}</p>
+            </div>`;
+        });
+      }
+    }
+
+    function changeMonth(offset) {
+      currentMonth += offset;
+      if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+      } else if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+      }
+      buildCalendar();
+    }
+
+    prevBtn.addEventListener("click", () => changeMonth(-1));
+    nextBtn.addEventListener("click", () => changeMonth(1));
+
+    const today = new Date();
+    currentYear = today.getFullYear();
+    currentMonth = today.getMonth();
+
+    fetchEvents();
+  </script>
+</body>
+</html>

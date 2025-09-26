@@ -69,25 +69,34 @@ const AdminSchema = new mongoose.Schema({
 });
 const post = mongoose.model("Users", AdminSchema);
 
-// User Schema (common for both normal + Google login)
-const userSchema = new mongoose.Schema({
 
+const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   age: { type: Number, required: true },
   phone: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // ⚡ hash later with bcrypt
+  password: { type: String, required: true },
   dream: { type: String, required: true, enum: ["Doctor", "Engineering", "Lawyer", "Entertainment & Arts", "Developer"] },
 
   // For Google login
-  googleId: { type: String }, // Google unique user ID
-  picture: { type: String },  // Profile picture
-  createdAt: { type: Date, default: Date.now }
+  googleId: { type: String },
+  picture: { type: String },
+  createdAt: { type: Date, default: Date.now },
+
+  // ⭐ Saved posts
+  savedPosts: [
+    {
+      postId: { type: mongoose.Schema.Types.ObjectId, ref: "Users" },
+      data: String,
+      imageurl: String,
+      event_date: Date,
+      createdAt: Date,
+      userEmail: String
+    }
+  ]
 });
 
 const genz  = mongoose.model("logins", userSchema);
-
-
 
 // POST form handler
 router.post('/submit', upload.single("imageurl"), async (req, res) => {
@@ -100,7 +109,7 @@ router.post('/submit', upload.single("imageurl"), async (req, res) => {
     }
 
     try {
-        const newUser = new User({
+        const newUser = new post({
             data,
             imageurl,
             event_date,
@@ -137,7 +146,12 @@ app.get("/submit",(req,res) => {
 app.get("/upload",(req,res) => {
     res.sendFile(path.join(__dirname, "upload.html"));
 });
-
+app.get("/calender",(req,res) => {
+    res.sendFile(path.join(__dirname, "calender.html"));
+});
+app.get("/roadmap",(req,res) => {
+    res.sendFile(path.join(__dirname, "roadmap.html"));
+});
 
 
 router.post("/signin", async (req, res) => {
@@ -170,6 +184,103 @@ const SessionSchema = new mongoose.Schema({
 
 const Session = mongoose.model("Session", SessionSchema);
 
+
+router.post("/save/:id", async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const userId = req.session.userId; // must be set at login
+
+    console.log("👉 Save attempt:", { postId, userId });
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Please log in first." });
+    }
+
+    // Find the post
+    const foundPost = await post.findById(postId);
+    if (!foundPost) {
+      return res.status(404).json({ success: false, message: "Post not found." });
+    }
+
+    // Find the user
+    const user = await genz.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    // Prevent duplicates
+    const alreadySaved = user.savedPosts.some(
+      (p) => p.postId.toString() === foundPost._id.toString()
+    );
+    if (alreadySaved) {
+      return res.json({ success: false, message: "Already saved." });
+    }
+
+    // Add new saved post
+    user.savedPosts.push({
+      postId: foundPost._id,
+      data: foundPost.data,
+      imageurl: foundPost.imageurl,
+      event_date: foundPost.event_date,
+      createdAt: foundPost.createdAt,
+      userEmail: foundPost.userEmail
+    });
+
+    await user.save();
+
+    console.log("✅ Post saved for user:", user.email, user.savedPosts);
+
+    res.json({ success: true, message: "Post saved successfully!" });
+  } catch (err) {
+    console.error("❌ Save failed:", err.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+router.get("/roadmap", (req, res) => {
+  // get input from query string ?path=frontend
+  const roadmap = req.query.path || "frontend"; // default frontend
+  res.render("roadmap", { roadmap });
+});
+
+
+router.get("/api/events", async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    if (!userId) return res.json([]);
+
+    const user = await genz.findById(userId);
+
+    // Convert savedPosts → FullCalendar events
+    const events = user.savedPosts
+      .filter(p => p.event_date) // only ones with a date
+      .map(p => ({
+        title: p.data,             // post text
+        start: p.event_date,       // event_date field
+        color: "#228B22",          // custom color
+        url: "/view"               // link to posts page (or `/post/${p.postId}`)
+      }));
+
+    res.json(events);
+  } catch (err) {
+    console.error("❌ API events fetch failed:", err.message);
+    res.status(500).json([]);
+  }
+});
+
+router.get("/calender", async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    if (!userId) return res.redirect("/login");
+
+    const user = await genz.findById(userId).populate("savedPosts.postId");
+
+    res.render("calender", { user }); // pass user with savedPosts
+  } catch (err) {
+    console.error("❌ Calendar fetch failed:", err.message);
+    res.status(500).send("Server error");
+  }
+});
 // -------------------------
 // Login Route
 // -------------------------
@@ -225,12 +336,12 @@ app.get("/logout", (req, res) => {
         res.send("Logged out");
     });
 });
-
+   
 
 // VIEW: all data route
 router.get("/view", async (req, res) => {
   try {
-    const user = await post.find().sort({ createdAt: -1 });
+    const posts = await post.find().sort({ createdAt: -1 });
     const login = await Session.findOne().sort({ createdAt: -1 }); // latest login
 
     let html = `
@@ -239,24 +350,45 @@ router.get("/view", async (req, res) => {
     <head>
       <meta charset="UTF-8">
       <title>CollegeZ</title>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
       <style>
+        /*.sidebar {
+          width: 60px;
+          background: #f1f1f1;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1rem 0;
+          position: fixed;
+          top: 0;
+          right: 0;
+          gap:2.5rem;
+          height: 100vh;
+          z-index: 1000;
+        }*/
 
-         .sidebar {
-           width: 60px;
-           background: #f1f1f1;      /* dark like Instagram */
-           display: flex;
-           flex-direction: column;
-           /*justify-content: space-between; /* pushes last button to bottom */
-           align-items: center;
-           padding: 1rem 0;
-           position: fixed;       /* always visible */
-           top: 0;
-           right: 0;
-           gap:2.5rem;
-           height: 100vh;         /* full height */
-           z-index: 1000;
-         }
+        .sidebar {
+  width: 60px;
+  background: #f1f1f1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 0;
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  z-index: 1000;
+}
+
+.sidebar .icon {
+  margin-top: auto; /* pushes icons to bottom */
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
         header {
           background-color: #228B22;
           color: white;
@@ -265,18 +397,18 @@ router.get("/view", async (req, res) => {
           justify-content: space-between;
           align-items: center;
         }
-       .btnbtn-primary{
+        .btnbtn-primary {
           background-color:#228B22;
           color:white;
         }
-       .icon{
-          margin-top:2050px;
-       }
+        .icon {
+          font-size: 1.8rem;
+          color: white;
+          margin: 1rem 0;
+        }
       </style>
     </head>
     <body>
-
- 
       <header>
         <h1 class="m-0">CollegenZ</h1>
         <input type="text" class="form-control w-25" placeholder="Search...">
@@ -287,67 +419,89 @@ router.get("/view", async (req, res) => {
           <!-- Join With Us Section -->
           <div class="card mb-4 p-3 d-flex flex-row justify-content-between align-items-center">
             <div>
-              <h2>Hi ${login.name}</h2>
+              <h2>Hi ${login ? login.name : "Guest"}</h2>
               <p>Represent your college with us</p>
-              <button class="btnbtn-primary" href°>Join Now</button>
+              <button class="btnbtn-primary">Join Now</button>
             </div>
             <div style="font-size: 2rem;">👤➕</div>
           </div>
 
-        <hr>
-   
-     <!-- Sidebar -->
-<div class="sidebar">
-  <div class="icon">
-    <a href="/upload">
-      <img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="50" height="50">
-    </a>
-    <a href="/upload">
-      <img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="50" height="50">
-    </a>
-    <a href="/upload">
-      <img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="50" height="50">
-    </a>
-    <a href="/upload">
-      <img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="50" height="50">
-    </a>
-  </div>
-</div>
-</main>
-</body>
-</html>
-`;
+          <hr>
+    `;
 
+    // Loop through posts
+    posts.forEach(p => {
+      html += `
+        <center><br>
+          <strong>${p.userEmail}</strong>
 
-user.forEach(user => {
-  html += `
-    <center><br>
-      <!-- Bootstrap CDN for styling -->
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-      <strong>${user.userEmail}</strong>
+          <div class="card mb-3 p-3">
+            <img src="/uploads/${p.imageurl}" width="700" class="d-block mx-auto" alt="..." />
+          </div>
+          <div>
+            <p>${p.data}</p>
+          </div>
 
+          <!-- Like & Save buttons -->
+          <div style="margin-top:10px;">
+            <button class="btn btn-success btn-sm">Like</button>
+            <button class="btn btn-outline-primary btn-sm save-btn" data-id="${p._id}">Save</button>
+          </div>
+        </center><br>
+      `;
+    });
 
-      <div class="card mb-3 p-3">
-        <img src="/uploads/${user.imageurl}" width="700" class="d-block mx-auto" alt="..." />
+    // Sidebar + script
+    html += `
+        </div>
+      </main>
+
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="icon">
+          <a href="/view">
+            <img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="50" height="50">
+          </a>
+          <a href="/roadmap">
+            <img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="50" height="50">
+          </a>
+          <a href="/upload">
+            <img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="50" height="50">
+          </a>
+          <a href="/calender">
+            <img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="50" height="50">
+          </a>
+        </div>
       </div>
-      <div>
-      <p>${user.data}</p>
-    </div>
 
-    <!-- Like & Save buttons -->
-<div style="margin-top:10px;">
-  <button class="btn btn-success btn-sm">👍 Like</button>
-  <button class="btn btn-outline-primary btn-sm">💾 Save</button>
-</div></center><br>`;
-});
+      <script>
+        document.querySelectorAll(".save-btn").forEach(button => {
+          button.addEventListener("click", async () => {
+            const postId = button.getAttribute("data-id");
+            try {
+              const res = await fetch("/save/" + postId, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" }
+              });
+              const data = await res.json();
+              alert(data.message || "Post saved!");
+            } catch (err) {
+              console.error("Error saving post:", err);
+            }
+          });
+        });
+      </script>
+    </body>
+    </html>
+    `;
 
-html += "</div>";
-res.send(html);
+    res.send(html);
   } catch (err) {
     console.error("❌ Fetch failed:", err.message);
     res.status(500).send("Failed to load data");
   }
 });
+
 
 // Connect the router
 app.use("/", router);

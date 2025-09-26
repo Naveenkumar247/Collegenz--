@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap Viewer</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .roadmap-container {
+      width: 100%;
+      height: 90vh;
+      border: 2px solid #333;
+      border-radius: 12px;
+      overflow: auto;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      background: #fff;
+      text-align: center;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+    }
+    form {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    select {
+      padding: 8px;
+      width: 250px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      background: #333;
+      color: white;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h2>Roadmap Viewer</h2>
+
+  <!-- Dropdown Form -->
+  <form id="roadmapForm">
+    <select id="roadmapSelect" required>
+      <option value="">-- Select a roadmap --</option>
+      <option value="frontend">Frontend Developer</option>
+      <option value="backend">Backend Developer</option>
+      <option value="devops">DevOps Engineer</option>
+      <option value="ai">AI / Data Scientist</option>
+    </select>
+    <button type="submit">View</button>
+  </form>
+
+  <!-- Roadmap Display -->
+  <div class="roadmap-container" id="roadmapContainer">
+    <p>Choose a roadmap above to load the image</p>
+  </div>
+
+  <script>
+    const form = document.getElementById('roadmapForm');
+    const select = document.getElementById('roadmapSelect');
+    const container = document.getElementById('roadmapContainer');
+
+    const roadmapImages = {
+      frontend: "https://raw.githubusercontent.com/kamranahmedse/developer-roadmap/master/public/static/roadmaps/frontend.png",
+      backend: "https://raw.githubusercontent.com/kamranahmedse/developer-roadmap/master/public/static/roadmaps/backend.png",
+      devops: "https://raw.githubusercontent.com/kamranahmedse/developer-roadmap/master/public/static/roadmaps/devops.png",
+      ai: "https://raw.githubusercontent.com/kamranahmedse/developer-roadmap/master/public/static/roadmaps/ai-data-scientist.png"
+    };
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const choice = select.value;
+
+      if (choice && roadmapImages[choice]) {
+        container.innerHTML = `<img src="${roadmapImages[choice]}" alt="${choice} roadmap">`;
+      } else {
+        container.innerHTML = `<p>❌ Please select a valid roadmap</p>`;
+      }
+    });
+  </script>
+</body>
+</html>
