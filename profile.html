@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Profile | CollegenZ</title>
+  <style>
+    body {
+      font-family: "Poppins", sans-serif;
+      background: #f4f6f8;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .profile-container {
+      background: #fff;
+      width: 380px;
+      padding: 25px 30px;
+      border-radius: 15px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #222;
+    }
+
+    .profile-item {
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .label {
+      font-weight: 600;
+      color: #555;
+      display: block;
+    }
+
+    .value {
+      color: #333;
+      margin-top: 4px;
+      font-size: 15px;
+    }
+
+    .loading {
+      text-align: center;
+      color: #777;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="profile-container">
+    <h2>My Profile</h2>
+    <div id="profileContent" class="loading">Loading profile...</div>
+  </div>
+
+  <script>
+    async function fetchProfile() {
+      try {
+        const res = await fetch("http://localhost:3000/api/profile", {
+          credentials: "include" // send session cookie
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          document.getElementById("profileContent").innerHTML =
+            "<p style='color:red;text-align:center;'>Please log in to view your profile.</p>";
+          return;
+        }
+
+        const user = data.user;
+
+        document.getElementById("profileContent").innerHTML = `
+          <div class="profile-item">
+            <span class="label">Username:</span>
+            <span class="value">${user.name}</span>
+          </div>
+
+          <div class="profile-item">
+            <span class="label">Date of Birth:</span>
+            <span class="value">${user.dob || "Not provided"}</span>
+          </div>
+
+          <div class="profile-item">
+            <span class="label">Email:</span>
+            <span class="value">${user.email}</span>
+          </div>
+
+          <div class="profile-item">
+            <span class="label">Dream:</span>
+            <span class="value">${user.dream}</span>
+          </div>
+
+          <div class="profile-item">
+            <span class="label">Joined On:</span>
+            <span class="value">${new Date(user.createdAt).toLocaleDateString()}</span>
+          </div>
+        `;
+      } catch (err) {
+        document.getElementById("profileContent").innerHTML =
+          "<p style='color:red;text-align:center;'>Error loading profile.</p>";
+        console.error("Profile fetch error:", err);
+      }
+    }
+
+    fetchProfile();
+  </script>
+</body>
+</html>

@@ -9,10 +9,8 @@ const router = express.Router();
 const { OAuth2Client } = require("google-auth-library");
 const client = new OAuth2Client("544793130820-9r6d2rv2lcrt3sad31mfk1spcp3gdff7.apps.googleusercontent.com");
 const app = express();
-
-
-app.use(express.urlencoded({ extended: true }));
-
+const cron = require("node-cron");
+const nodemailer = require("nodemailer");
 
 // Session Setup
 app.use(session({
@@ -61,13 +59,18 @@ const AdminSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   event_date: { type: Date },
   userEmail:{ type: String},
-   likes: {
-    type: Number,
-    default: 0
-  },
-  likedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "Users" }]
+  // Likes
+  likes: { type: Number, default: 0 },
+  likedBy: {
+  type: [{ type: mongoose.Schema.Types.ObjectId, ref: "Users" }],
+  default: [],
+  set: arr => [...new Set(arr.map(id => id.toString()))]  // enforce unique
+},
+
+  saves: { type: Number, default: 0 }, 
+  savedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "logins"}]
 });
-const post = mongoose.model("Users", AdminSchema);
+const Post = mongoose.model("Users", AdminSchema);
 
 
 const userSchema = new mongoose.Schema({
@@ -109,7 +112,7 @@ router.post('/submit', upload.single("imageurl"), async (req, res) => {
     }
 
     try {
-        const newUser = new post({
+        const newUser = new Post({
             data,
             imageurl,
             event_date,
@@ -152,7 +155,9 @@ app.get("/calender",(req,res) => {
 app.get("/roadmap",(req,res) => {
     res.sendFile(path.join(__dirname, "roadmap.html"));
 });
-
+app.get("/profile",(req,res) => {
+    res.sendFile(path.join(__dirname, "profile.html"));
+});
 
 router.post("/signin", async (req, res) => {
   const { name,age,phone,email, password,dream } = req.body;
@@ -164,14 +169,14 @@ router.post("/signin", async (req, res) => {
     const user = new genz({ name, age, phone,email, password: hashedPassword, dream});
     await user.save();
 
-    res.redirect("/view");
+    res.redirect("/signin");
   } catch (err) {
     console.error(err);
     res.status(500).send("Error signing up");
   }
 });
 
-
+	
 // Session Schema
 const SessionSchema = new mongoose.Schema({
   name:{type: String, required:true },
@@ -183,7 +188,6 @@ const SessionSchema = new mongoose.Schema({
 });
 
 const Session = mongoose.model("Session", SessionSchema);
-
 
 router.post("/save/:id", async (req, res) => {
   try {
@@ -197,7 +201,7 @@ router.post("/save/:id", async (req, res) => {
     }
 
     // Find the post
-    const foundPost = await post.findById(postId);
+    const foundPost = await Post.findById(postId);
     if (!foundPost) {
       return res.status(404).json({ success: false, message: "Post not found." });
     }
@@ -235,6 +239,159 @@ router.post("/save/:id", async (req, res) => {
     console.error("❌ Save failed:", err.message);
     res.status(500).json({ success: false, message: "Server error" });
   }
+  });
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || "mysecret",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // must be false for localhost
+    httpOnly: true,
+    sameSite: "lax"
+  }
+}));
+
+app.post("/posts/:id/like", async (req, res) => {
+  try {
+    const userId = req.body.userId; 
+    const postId = req.params.id;
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ error: "Post not found" });
+
+    console.log("Like request => userId:", userId, "postId:", postId);
+    console.log("Current likes before action:", post.likes);
+
+    const alreadyLiked = post.likedBy.includes(userId);
+
+    if (alreadyLiked) {
+      post.likedBy.pull(userId);
+      post.likes = post.likes - 1;
+      console.log("User unliked. Updated likes:", post.likes);
+    } else {
+      post.likedBy.push(userId);
+      post.likes = post.likes + 1;
+      console.log("User liked. Updated likes:", post.likes);
+    }
+
+    await post.save();
+    console.log("Likes after save:", post.likes);
+
+    res.json({ likes: post.likes, liked: !alreadyLiked });
+  } catch (err) {
+    console.error("Like error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/posts/:id/save", async (req, res) => {
+  try {
+    const userId = req.body.userId;
+    const postId = req.params.id;
+
+    const user = await genz.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const post = await Post.findById(postId);
+    if (!post) return res.status(404).json({ error: "Post not found" });
+
+    console.log("Save request => userId:", userId, "postId:", postId);
+    console.log("Current saves before action:", post.saves);
+
+    // Ensure arrays exist
+    if (!Array.isArray(user.savedPosts)) user.savedPosts = [];
+    if (!Array.isArray(post.savedBy)) post.savedBy = [];
+
+    // Check if already saved
+    const alreadySaved = post.savedBy.some(id => id.toString() === userId);
+
+    if (alreadySaved) {
+      // --- UNSAVE ---
+      post.savedBy = post.savedBy.filter(id => id.toString() !== userId);
+      post.saves = Math.max(0, post.saves - 1);
+
+      user.savedPosts = user.savedPosts.filter(sp => sp.postId.toString() !== postId);
+      console.log("User unsaved post. Updated saves:", post.saves);
+    } else {
+      // --- SAVE ---
+      post.savedBy.push(userId);
+      post.saves = post.saves + 1;
+
+      user.savedPosts.push({
+        postId,
+        data: post.data,
+        imageurl: post.imageurl,
+        event_date: post.event_date,
+        createdAt: post.createdAt,
+        userEmail: post.userEmail
+      });
+
+      console.log("User saved post. Updated saves:", post.saves);
+    }
+
+    // Ensure Mongoose knows subdocument changed
+    user.markModified("savedPosts");
+
+    // Save both
+    await user.save();
+    await post.save();
+
+    console.log("Saves after save:", post.saves);
+    res.json({ saves: post.saves, saved: !alreadySaved });
+  } catch (err) {
+    console.error("Save error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Email Transporter (Use Gmail App Password)
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "yourgmail@gmail.com", // 🔹 replace with your Gmail
+    pass: "your-app-password",   // 🔹 use App Password (not normal password)
+  },
+});
+
+// 🕒 Run every day at 9:00 AM
+cron.schedule("0 9 * * *", async () => {
+  console.log("🔍 Checking for next-day event reminders...");
+
+  try {
+    // Find all users that have savedPosts with event_date
+    const users = await genz.find({ "savedPosts.event_date": { $exists: true } });
+
+    // Get tomorrow's date range
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const start = new Date(tomorrow.setHours(0, 0, 0, 0));
+    const end = new Date(tomorrow.setHours(23, 59, 59, 999));
+
+    for (const user of users) {
+      for (const post of user.savedPosts) {
+        if (post.event_date && post.event_date >= start && post.event_date <= end) {
+          // Compose email
+          const mailOptions = {
+            from: "yourgmail@gmail.com",
+            to: user.email,
+            subject: `Reminder: "${post.data}" is happening tomorrow!`,
+            text: `Hey ${user.name}, this is a friendly reminder that your saved event "${post.data}" is scheduled for tomorrow (${new Date(post.event_date).toDateString()}).`,
+          };
+
+          try {
+            await transporter.sendMail(mailOptions);
+            console.log(`✅ Reminder sent to ${user.email} for "${post.data}"`);
+          } catch (err) {
+            console.error("❌ Failed to send reminder:", err.message);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("❌ Reminder cron job failed:", err.message);
+  }
 });
 
 router.get("/roadmap", (req, res) => {
@@ -253,13 +410,14 @@ router.get("/api/events", async (req, res) => {
 
     // Convert savedPosts → FullCalendar events
     const events = user.savedPosts
-      .filter(p => p.event_date) // only ones with a date
-      .map(p => ({
-        title: p.data,             // post text
-        start: p.event_date,       // event_date field
-        color: "#228B22",          // custom color
-        url: "/view"               // link to posts page (or `/post/${p.postId}`)
-      }));
+  .filter(p => p.event_date)
+  .map(p => ({
+    title: p.data,
+    start: p.event_date.toISOString().split("T")[0], // only date part
+    allDay: true,                                   // no time shown
+    color: "#228B22",
+    url: "/view"
+  }));
 
     res.json(events);
   } catch (err) {
@@ -282,8 +440,7 @@ router.get("/calender", async (req, res) => {
   }
 });
 // -------------------------
-// Login Route
-// -------------------------
+// Login Route// -------------------------
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -321,7 +478,6 @@ router.post("/login", async (req, res) => {
   }
 });
 
-
 // Protected Route
 app.get("/dashboard", (req, res) => {
     if (!req.session.user) {
@@ -336,16 +492,343 @@ app.get("/logout", (req, res) => {
         res.send("Logged out");
     });
 });
-   
 
 // VIEW: all data route
 router.get("/view", async (req, res) => {
   try {
-    const posts = await post.find().sort({ createdAt: -1 });
+    const posts = await Post.find().sort({ createdAt: -1 });
     const login = await Session.findOne().sort({ createdAt: -1 }); // latest login
 
     let html = `
-    <!DOCTYPE html>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CollegeZ</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .sidebar {
+      width: 60px;
+      background: #f1f1f1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem 0;
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100vh;
+      z-index: 1000;
+    }
+    .sidebar .icon {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    header {
+      background-color: #228B22;
+      color: white;
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btnbtn-primary {
+      background-color:#228B22;
+      color:white;
+    }
+    .icon {
+      font-size: 1.8rem;
+      color: white;
+      margin: 1rem 0;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1 class="m-0">CollegenZ</h1>
+    <input type="text" class="form-control w-25" placeholder="Search...">
+  </header>
+
+  <main class="d-flex" style="margin-top: 50px;">
+    <div class="container me-auto">
+      <!-- Join With Us Section -->
+      <div class="card mb-4 p-3 d-flex flex-row justify-content-between align-items-center">
+        <div>
+          <h2>Hi ${login ? login.name : "Guest"}</h2>
+          <p>Represent your college with us</p>
+          <button class="btn btn-primary">Join Now</button>
+        </div>
+        <div style="font-size: 2rem;">👤➕</div>
+      </div>
+
+      <hr>`;
+
+posts.forEach(p => {
+  html += `
+    <div class="card mb-3 p-3 text-center" style="max-width: 700px; margin: 20px auto;">
+      <strong>${p.userEmail}</strong>
+
+      <div class="my-3">
+        <img src="/uploads/${p.imageurl}" class="img-fluid" alt="Post image" />
+      </div>
+
+      <p>${p.data}</p>
+
+      <!-- Like & Save buttons with counts -->
+      <div class="mt-3 d-flex justify-content-center align-items-center gap-4">
+        <!-- Like -->
+        <button class="btn btn-link btn-sm like-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;">
+          <i class="bi bi-heart"></i>
+        </button>
+        <span class="like-count" id="like-count-${p._id}">${p.likes || 0}</span>
+
+        <!-- Save -->
+        <button class="btn btn-link btn-sm save-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;">
+          <i class="bi bi-bookmark"></i>
+        </button>
+        <span class="save-count" id="save-count-${p._id}">${p.saves || 0}</span>
+      </div>
+    </div>
+  `;
+});
+
+// Sidebar + scripts
+html += `
+    </div>
+  </main>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="icon">
+      <a href="/view">
+        <img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="50" height="50">
+      </a>
+      <a href="/roadmap">
+        <img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="50" height="50">
+      </a>
+      <a href="/upload">
+        <img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="50" height="50">
+      </a>
+      <a href="/calender">
+        <img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="50" height="50">
+      </a>
+    </div>
+  </div>
+
+  <script>
+
+         document.querySelectorAll(".save-btn").forEach(button => {
+          button.addEventListener("click", async () => {
+            const postId = button.getAttribute("data-id");
+            try {
+              const res = await fetch("/save/" + postId, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" }
+              });
+              const data = await res.json();
+              alert(data.message || "Post saved!");
+            } catch (err) {
+              console.error("Error saving post:", err);
+            }
+          });
+        });
+    const currentUserId = "${login ? login._id : ""}"; // 👈 inject logged-in userId here
+
+    document.addEventListener("click", async function(e) {
+      // Like button
+      if (e.target.closest(".like-btn")) {
+        const btn = e.target.closest(".like-btn");
+        const postId = btn.getAttribute("data-id");
+        const icon = btn.querySelector("i");
+        const countEl = document.getElementById("like-count-" + postId);
+
+        const res = await fetch("/posts/" + postId + "/like", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: currentUserId })
+        });
+        const data = await res.json();
+
+        if (data.liked) {
+          icon.classList.replace("bi-heart", "bi-heart-fill");
+          icon.style.color = "#228B22";
+        } else {
+          icon.classList.replace("bi-heart-fill", "bi-heart");
+          icon.style.color = "gray";
+        }
+        countEl.textContent = data.likes;
+      }
+
+      // Save button
+if (e.target.closest(".save-btn")) {
+  const btn = e.target.closest(".save-btn");
+  const postId = btn.getAttribute("data-id");
+  const icon = btn.querySelector("i");
+  const countEl = document.getElementById("save-count-" + postId);
+
+  const res = await fetch("/save/" + postId, { // ✅ fixed route here
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId: currentUserId })
+  });
+
+  const data = await res.json();
+
+  if (data.saved) {  // or data.success if backend sends that
+    icon.classList.replace("bi-bookmark", "bi-bookmark-fill");
+    icon.style.color = "#228B22";
+  } else {
+    icon.classList.replace("bi-bookmark-fill", "bi-bookmark");
+    icon.style.color = "gray";
+  }
+
+  if (data.saves !== undefined) {
+    countEl.textContent = data.saves;
+  }
+}
+    });
+  </script>
+</body>
+</html>`;
+
+
+/*<body>
+  <header>
+    <h1 class="m-0">CollegenZ</h1>
+    <input type="text" class="form-control w-25" placeholder="Search...">
+  </header>
+
+  <main class="d-flex" style="margin-top: 50px;">
+    <div class="container me-auto">
+      <!-- Join With Us Section -->
+      <div class="card mb-4 p-3 d-flex flex-row justify-content-between align-items-center">
+        <div>
+          <h2>Hi ${login ? login.name : "Guest"}</h2>
+          <p>Represent your college with us</p>
+          <button class="btnbtn-primary">Join Now</button>
+        </div>
+        <div style="font-size: 2rem;">👤➕</div>
+      </div>
+
+      <hr>`;
+
+posts.forEach(p => {
+  html += `
+    <div class="card mb-3 p-3 text-center" style="max-width: 700px; margin: 20px auto;">
+      <strong>${p.userEmail}</strong>
+
+      <div class="my-3">
+        <img src="/uploads/${p.imageurl}" class="img-fluid" alt="Post image" />
+      </div>
+
+      <p>${p.data}</p>
+
+      <!-- Like & Save buttons with counts -->
+      <div class="mt-3 d-flex justify-content-center align-items-center gap-4">
+        <!-- Like -->
+        <button class="btn btn-link btn-sm like-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;">
+          <i class="bi bi-heart"></i>
+        </button>
+        <span class="like-count" id="like-count-${p._id}">${p.likes || 0}</span>
+
+        <!-- Save -->
+        <button class="btn btn-link btn-sm save-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;">
+          <i class="bi bi-bookmark"></i>
+        </button>
+        <span class="save-count" id="save-count-${p._id}">${p.totalSaved || 0}</span>
+      </div>
+    </div>
+  `;
+});
+
+// Sidebar + scripts
+html += `
+    </div>
+  </main>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="icon">
+      <a href="/view">
+        <img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="50" height="50">
+      </a>
+      <a href="/roadmap">
+        <img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="50" height="50">
+      </a>
+      <a href="/upload">
+        <img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="50" height="50">
+      </a>
+      <a href="/calender">
+        <img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="50" height="50">
+      </a>
+    </div>
+  </div>
+
+  <script>
+    const currentUserId = "${login ? login._id : ""}"; // 👈 inject logged-in userId here
+
+    document.addEventListener("click", async function(e) {
+      // Like button
+      if (e.target.closest(".like-btn")) {
+        const btn = e.target.closest(".like-btn");
+        const postId = btn.getAttribute("data-id");
+        const icon = btn.querySelector("i");
+        const countEl = document.getElementById("like-count-" + postId);
+
+        const res = await fetch("/posts/" + postId + "/like", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: currentUserId })
+        });
+        const data = await res.json();
+
+        if (data.liked) {
+          icon.classList.replace("bi-heart", "bi-heart-fill");
+          icon.style.color = "#228B22";
+        } else {
+          icon.classList.replace("bi-heart-fill", "bi-heart");
+          icon.style.color = "gray";
+        }
+        countEl.textContent = data.likes;
+      }
+
+      // Save button
+      if (e.target.closest(".save-btn")) {
+        const btn = e.target.closest(".save-btn");
+        const postId = btn.getAttribute("data-id");
+        const icon = btn.querySelector("i");
+        const countEl = document.getElementById("save-count-" + postId);
+
+        const res = await fetch("/posts/" + postId + "/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: currentUserId })
+        });
+        const data = await res.json();
+
+        if (data.saved) {
+          icon.classList.replace("bi-bookmark", "bi-bookmark-fill");
+          icon.style.color = "#228B22";
+        } else {
+          icon.classList.replace("bi-bookmark-fill", "bi-bookmark");
+          icon.style.color = "gray";
+        }
+
+        countEl.textContent = data.totalSaved;
+      }
+    });
+  </script>
+</body>
+</html>`;
+
+
+
+   <!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
@@ -353,42 +836,28 @@ router.get("/view", async (req, res) => {
       <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
       <style>
-        /*.sidebar {
-          width: 60px;
-          background: #f1f1f1;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          align-items: center;
-          padding: 1rem 0;
-          position: fixed;
-          top: 0;
-          right: 0;
-          gap:2.5rem;
-          height: 100vh;
-          z-index: 1000;
-        }*/
+        
 
         .sidebar {
-  width: 60px;
-  background: #f1f1f1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 1rem 0;
-  position: fixed;
-  top: 0;
-  right: 0;
-  height: 100vh;
-  z-index: 1000;
-}
+         width: 60px;
+         background: #f1f1f1;
+         display: flex;
+         flex-direction: column;
+         align-items: center;
+         padding: 1rem 0;
+         position: fixed;
+         top: 0;
+         right: 0;
+         height: 100vh;
+         z-index: 1000;
+         }
 
-.sidebar .icon {
-  margin-top: auto; /* pushes icons to bottom */
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
+       .sidebar .icon {
+         margin-top: auto; // pushes icons to bottom 
+         display: flex;
+         flex-direction: column;
+         gap: 1rem;
+        }      
         header {
           background-color: #228B22;
           color: white;
@@ -429,27 +898,26 @@ router.get("/view", async (req, res) => {
           <hr>
     `;
 
-    // Loop through posts
-    posts.forEach(p => {
+
+      posts.forEach(p => {
       html += `
-        <center><br>
-          <strong>${p.userEmail}</strong>
-
-          <div class="card mb-3 p-3">
-            <img src="/uploads/${p.imageurl}" width="700" class="d-block mx-auto" alt="..." />
-          </div>
-          <div>
-            <p>${p.data}</p>
-          </div>
-
-          <!-- Like & Save buttons -->
-          <div style="margin-top:10px;">
-            <button class="btn btn-success btn-sm">Like</button>
-            <button class="btn btn-outline-primary btn-sm save-btn" data-id="${p._id}">Save</button>
-          </div>
-        </center><br>
-      `;
-    });
+    <div class="card mb-3 p-3 text-center" style="max-width: 700px; margin: 20px auto;">
+      <strong>${p.userEmail}</strong>
+      
+      <div class="my-3">
+        <img src="/uploads/${p.imageurl}" class="img-fluid" alt="Post image" />
+      </div>
+      
+      <p>${p.data}</p>
+      
+      <!-- Like & Save buttons -->
+      <div class="mt-3">
+        <button class="btn btn-success btn-sm me-2">Like</button>
+        <button class="btn btn-outline-primary btn-sm save-btn" data-id="${p._id}">Save</button>
+      </div>
+    </div>
+  `;
+});
 
     // Sidebar + script
     html += `
@@ -492,8 +960,8 @@ router.get("/view", async (req, res) => {
         });
       </script>
     </body>
-    </html>
-    `;
+    </html>*/
+    
 
     res.send(html);
   } catch (err) {
