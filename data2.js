@@ -158,6 +158,13 @@ app.get("/roadmap",(req,res) => {
 app.get("/profile",(req,res) => {
     res.sendFile(path.join(__dirname, "profile.html"));
 });
+app.get("/sitemap.xml",(req,res) => {
+    res.sendFile(path.join(__dirname, "sitemap.xml"));
+});
+app.get("/robots.txt",(req,res) => {
+    res.sendFile(path.join(__dirname, "robots.txt"));
+});
+
 
 router.post("/signin", async (req, res) => {
   const { name,age,phone,email, password,dream } = req.body;
