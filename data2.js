@@ -176,7 +176,7 @@ router.post("/signin", async (req, res) => {
     const user = new genz({ name, age, phone,email, password: hashedPassword, dream});
     await user.save();
 
-    res.redirect("/signin");
+    res.redirect("/login");
   } catch (err) {
     console.error(err);
     res.status(500).send("Error signing up");
