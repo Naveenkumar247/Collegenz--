@@ -356,8 +356,8 @@ app.post("/posts/:id/save", async (req, res) => {
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "yourgmail@gmail.com", // 🔹 replace with your Gmail
-    pass: "your-app-password",   // 🔹 use App Password (not normal password)
+    user: "wwwwvoiceofnaveen3@gmail.com", // 🔹 replace with your Gmail
+    pass: "dymg iavo tbaw bzdz",   // 🔹 use App Password (not normal password)
   },
 });
 
