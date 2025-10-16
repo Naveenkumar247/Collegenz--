@@ -352,55 +352,6 @@ app.post("/posts/:id/save", async (req, res) => {
   }
 });
 
-// Email Transporter (Use Gmail App Password)
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "wwwwvoiceofnaveen3@gmail.com", // 🔹 replace with your Gmail
-    pass: "dymg iavo tbaw bzdz",   // 🔹 use App Password (not normal password)
-  },
-});
-
-// 🕒 Run every day at 9:00 AM
-cron.schedule("0 9 * * *", async () => {
-  console.log("🔍 Checking for next-day event reminders...");
-
-  try {
-    // Find all users that have savedPosts with event_date
-    const users = await genz.find({ "savedPosts.event_date": { $exists: true } });
-
-    // Get tomorrow's date range
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const start = new Date(tomorrow.setHours(0, 0, 0, 0));
-    const end = new Date(tomorrow.setHours(23, 59, 59, 999));
-
-    for (const user of users) {
-      for (const post of user.savedPosts) {
-        if (post.event_date && post.event_date >= start && post.event_date <= end) {
-          // Compose email
-          const mailOptions = {
-            from: "yourgmail@gmail.com",
-            to: user.email,
-            subject: `Reminder: "${post.data}" is happening tomorrow!`,
-            text: `Hey ${user.name}, this is a friendly reminder that your saved event "${post.data}" is scheduled for tomorrow (${new Date(post.event_date).toDateString()}).`,
-          };
-
-          try {
-            await transporter.sendMail(mailOptions);
-            console.log(`✅ Reminder sent to ${user.email} for "${post.data}"`);
-          } catch (err) {
-            console.error("❌ Failed to send reminder:", err.message);
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.error("❌ Reminder cron job failed:", err.message);
-  }
-});
-
 router.get("/roadmap", (req, res) => {
   // get input from query string ?path=frontend
   const roadmap = req.query.path || "frontend"; // default frontend
@@ -484,6 +435,59 @@ router.post("/login", async (req, res) => {
     res.status(500).send("Error logging in");
   }
 });
+
+// ✅ Email setup (Gmail)
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "collegenzofficial@gmail.com", // your Gmail
+    pass: "mviv chvd wwdk kzbh" // use App Password (not real Gmail password)
+  },
+});
+
+// ✅ Function to send reminder emails
+const sendReminderEmail = async (email, event) => {
+  const mailOptions = {
+    from: '"CollegenZ" <collegenzofficial@gmail.com>',
+    to: email,
+    subject: `Reminder: ${event.data || "Hackathon"} is Tomorrow!`,
+    text: `Hey there 👋\n\nThis is a quick reminder that your saved hackathon "${event.data}" is happening tomorrow.\n\nDon't forget to prepare and give your best! 💪\n\n– Team CollegenZ`,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`📧 Reminder sent to ${email} for ${event.data}`);
+  } catch (err) {
+    console.error("❌ Error sending email:", err);
+  }
+};
+
+// ✅ Daily Cron Job (runs every day at 9:00 AM)
+cron.schedule("0 9 * * *", async () => {
+  console.log("⏰ Checking for upcoming hackathons...");
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const startOfDay = new Date(tomorrow.setHours(0, 0, 0, 0));
+  const endOfDay = new Date(tomorrow.setHours(23, 59, 59, 999));
+
+  try {
+    const users = await genz.find({});
+
+    for (const user of users) {
+      const upcomingEvents = user.savedPosts.filter(
+        event => event.event_date >= startOfDay && event.event_date <= endOfDay
+      );
+
+      for (const event of upcomingEvents) {
+        await sendReminderEmail(user.email, event);
+      }
+    }
+  } catch (err) {
+    console.error("❌ Error checking reminders:", err);
+  }
+});
+
 
 // Protected Route
 app.get("/dashboard", (req, res) => {
