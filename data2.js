@@ -11,6 +11,9 @@ const client = new OAuth2Client("544793130820-9r6d2rv2lcrt3sad31mfk1spcp3gdff7.a
 const app = express();
 const cron = require("node-cron");
 const nodemailer = require("nodemailer");
+const MongoStore = require("connect-mongo");
+//const authRoutes = require("./routes/auth");
+
 
 // Session Setup
 app.use(session({
@@ -128,7 +131,6 @@ router.post('/submit', upload.single("imageurl"), async (req, res) => {
 });
 
 
-
 // Routes
 
 
@@ -167,19 +169,34 @@ app.get("/robots.txt",(req,res) => {
 
 
 router.post("/signin", async (req, res) => {
-  const { name,age,phone,email, password,dream } = req.body;
   try {
-    const existingUser = await genz.findOne({ email });
-    if (existingUser) return res.redirect("/login");
+    const { name, age, phone, email, password, dream } = req.body;
 
+    // 1️⃣ Convert email to lowercase
+    const lowerEmail = email.toLowerCase();
+
+    // 2️⃣ Check if user already exists
+    const existingUser = await genz.findOne({ email: lowerEmail });
+    if (existingUser) return res.status(400).send("User already exists");
+
+    // 3️⃣ Hash password
     const hashedPassword = await bcryptjs.hash(password, 10);
-    const user = new genz({ name, age, phone,email, password: hashedPassword, dream});
-    await user.save();
 
+    // 4️⃣ Create user
+    const newUser = new genz({
+      name,
+      age,
+      phone,
+      email: lowerEmail,
+      password: hashedPassword,
+      dream
+    });
+
+    await newUser.save();
     res.redirect("/login");
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Error signing up");
+    console.error("Registration error:", err);
+    res.status(500).send("Error registering user");
   }
 });
 
@@ -248,16 +265,25 @@ router.post("/save/:id", async (req, res) => {
   }
   });
 
+// Session setup
 app.use(session({
-  secret: process.env.SESSION_SECRET || "mysecret",
+  secret: process.env.SESSION_SECRET || "your-secret-key",
   resave: false,
   saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl:"mongodb+srv://naveen:naveen1234@mongodb.wypdxsg.mongodb.net/?retryWrites=true&w=majority&appName=Mongodb>",
+    ttl: 24 * 60 * 60, // 1 day
+  }),
   cookie: {
-    secure: false, // must be false for localhost
-    httpOnly: true,
-    sameSite: "lax"
+    maxAge: 24 * 60 * 60 * 1000, // 1 day
+    secure: false,
+    httpOnly: true
   }
 }));
+
+// Routes
+//app.use("/auth", authRoutes);
+
 
 app.post("/posts/:id/like", async (req, res) => {
   try {
@@ -352,6 +378,55 @@ app.post("/posts/:id/save", async (req, res) => {
   }
 });
 
+// Email Transporter (Use Gmail App Password)
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: "wwwwvoiceofnaveen3@gmail.com", // 🔹 replace with your Gmail
+    pass: "dymg iavo tbaw bzdz",   // 🔹 use App Password (not normal password)
+  },
+});
+
+// 🕒 Run every day at 9:00 AM
+cron.schedule("0 9 * * *", async () => {
+  console.log("🔍 Checking for next-day event reminders...");
+
+  try {
+    // Find all users that have savedPosts with event_date
+    const users = await genz.find({ "savedPosts.event_date": { $exists: true } });
+
+    // Get tomorrow's date range
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const start = new Date(tomorrow.setHours(0, 0, 0, 0));
+    const end = new Date(tomorrow.setHours(23, 59, 59, 999));
+
+    for (const user of users) {
+      for (const post of user.savedPosts) {
+        if (post.event_date && post.event_date >= start && post.event_date <= end) {
+          // Compose email
+          const mailOptions = {
+            from: "yourgmail@gmail.com",
+            to: user.email,
+            subject: `Reminder: "${post.data}" is happening tomorrow!`,
+            text: `Hey ${user.name}, this is a friendly reminder that your saved event "${post.data}" is scheduled for tomorrow (${new Date(post.event_date).toDateString()}).`,
+          };
+
+          try {
+            await transporter.sendMail(mailOptions);
+            console.log(`✅ Reminder sent to ${user.email} for "${post.data}"`);
+          } catch (err) {
+            console.error("❌ Failed to send reminder:", err.message);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("❌ Reminder cron job failed:", err.message);
+  }
+});
+
 router.get("/roadmap", (req, res) => {
   // get input from query string ?path=frontend
   const roadmap = req.query.path || "frontend"; // default frontend
@@ -398,96 +473,33 @@ router.get("/calender", async (req, res) => {
   }
 });
 // -------------------------
-// Login Route// -------------------------
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
   try {
-    const user = await genz.findOne({ email });
-    if (!user || !user.password) {
-      return res.status(400).send("User not found");
-    }
+    const { email, password } = req.body;
+    const lowerEmail = email.toLowerCase();
 
+    // 1️⃣ Find user
+    const user = await genz.findOne({ email: lowerEmail });
+    if (!user) return res.status(400).send("User not found");
+
+    // 2️⃣ Compare password
     const isMatch = await bcryptjs.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).send("Invalid credentials");
-    }
+    if (!isMatch) return res.status(400).send("Invalid credentials");
 
-    // Save user info in express-session
+    // 3️⃣ Save session
     req.session.userId = user._id;
-    req.session.userEmail = user.email;
-    req.session.username = user.name
-    // Save session info in MongoDB
-    const newSession = new Session({
-      name:user.name,
-      userId: user._id,
-      email: user.email,
-      sessionId: req.sessionID, // provided by express-session
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24) // 1 day
+    req.session.username = user.name;
+    req.session.email = user.email;
+
+    req.session.save(() => {
+      res.redirect("/view");
+      
     });
-
-    await newSession.save();
-
-    res.redirect("/view");
-
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Error logging in");
+    res.redirect("/signin");
+    
   }
 });
-
-// ✅ Email setup (Gmail)
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "collegenzofficial@gmail.com", // your Gmail
-    pass: "mviv chvd wwdk kzbh" // use App Password (not real Gmail password)
-  },
-});
-
-// ✅ Function to send reminder emails
-const sendReminderEmail = async (email, event) => {
-  const mailOptions = {
-    from: '"CollegenZ" <collegenzofficial@gmail.com>',
-    to: email,
-    subject: `Reminder: ${event.data || "Hackathon"} is Tomorrow!`,
-    text: `Hey there 👋\n\nThis is a quick reminder that your saved hackathon "${event.data}" is happening tomorrow.\n\nDon't forget to prepare and give your best! 💪\n\n– Team CollegenZ`,
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`📧 Reminder sent to ${email} for ${event.data}`);
-  } catch (err) {
-    console.error("❌ Error sending email:", err);
-  }
-};
-
-// ✅ Daily Cron Job (runs every day at 9:00 AM)
-cron.schedule("0 9 * * *", async () => {
-  console.log("⏰ Checking for upcoming hackathons...");
-
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const startOfDay = new Date(tomorrow.setHours(0, 0, 0, 0));
-  const endOfDay = new Date(tomorrow.setHours(23, 59, 59, 999));
-
-  try {
-    const users = await genz.find({});
-
-    for (const user of users) {
-      const upcomingEvents = user.savedPosts.filter(
-        event => event.event_date >= startOfDay && event.event_date <= endOfDay
-      );
-
-      for (const event of upcomingEvents) {
-        await sendReminderEmail(user.email, event);
-      }
-    }
-  } catch (err) {
-    console.error("❌ Error checking reminders:", err);
-  }
-});
-
 
 // Protected Route
 app.get("/dashboard", (req, res) => {
@@ -706,272 +718,6 @@ if (e.target.closest(".save-btn")) {
   </script>
 </body>
 </html>`;
-
-
-/*<body>
-  <header>
-    <h1 class="m-0">CollegenZ</h1>
-    <input type="text" class="form-control w-25" placeholder="Search...">
-  </header>
-
-  <main class="d-flex" style="margin-top: 50px;">
-    <div class="container me-auto">
-      <!-- Join With Us Section -->
-      <div class="card mb-4 p-3 d-flex flex-row justify-content-between align-items-center">
-        <div>
-          <h2>Hi ${login ? login.name : "Guest"}</h2>
-          <p>Represent your college with us</p>
-          <button class="btnbtn-primary">Join Now</button>
-        </div>
-        <div style="font-size: 2rem;">👤➕</div>
-      </div>
-
-      <hr>`;
-
-posts.forEach(p => {
-  html += `
-    <div class="card mb-3 p-3 text-center" style="max-width: 700px; margin: 20px auto;">
-      <strong>${p.userEmail}</strong>
-
-      <div class="my-3">
-        <img src="/uploads/${p.imageurl}" class="img-fluid" alt="Post image" />
-      </div>
-
-      <p>${p.data}</p>
-
-      <!-- Like & Save buttons with counts -->
-      <div class="mt-3 d-flex justify-content-center align-items-center gap-4">
-        <!-- Like -->
-        <button class="btn btn-link btn-sm like-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;">
-          <i class="bi bi-heart"></i>
-        </button>
-        <span class="like-count" id="like-count-${p._id}">${p.likes || 0}</span>
-
-        <!-- Save -->
-        <button class="btn btn-link btn-sm save-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;">
-          <i class="bi bi-bookmark"></i>
-        </button>
-        <span class="save-count" id="save-count-${p._id}">${p.totalSaved || 0}</span>
-      </div>
-    </div>
-  `;
-});
-
-// Sidebar + scripts
-html += `
-    </div>
-  </main>
-
-  <!-- Sidebar -->
-  <div class="sidebar">
-    <div class="icon">
-      <a href="/view">
-        <img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="50" height="50">
-      </a>
-      <a href="/roadmap">
-        <img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="50" height="50">
-      </a>
-      <a href="/upload">
-        <img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="50" height="50">
-      </a>
-      <a href="/calender">
-        <img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="50" height="50">
-      </a>
-    </div>
-  </div>
-
-  <script>
-    const currentUserId = "${login ? login._id : ""}"; // 👈 inject logged-in userId here
-
-    document.addEventListener("click", async function(e) {
-      // Like button
-      if (e.target.closest(".like-btn")) {
-        const btn = e.target.closest(".like-btn");
-        const postId = btn.getAttribute("data-id");
-        const icon = btn.querySelector("i");
-        const countEl = document.getElementById("like-count-" + postId);
-
-        const res = await fetch("/posts/" + postId + "/like", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: currentUserId })
-        });
-        const data = await res.json();
-
-        if (data.liked) {
-          icon.classList.replace("bi-heart", "bi-heart-fill");
-          icon.style.color = "#228B22";
-        } else {
-          icon.classList.replace("bi-heart-fill", "bi-heart");
-          icon.style.color = "gray";
-        }
-        countEl.textContent = data.likes;
-      }
-
-      // Save button
-      if (e.target.closest(".save-btn")) {
-        const btn = e.target.closest(".save-btn");
-        const postId = btn.getAttribute("data-id");
-        const icon = btn.querySelector("i");
-        const countEl = document.getElementById("save-count-" + postId);
-
-        const res = await fetch("/posts/" + postId + "/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: currentUserId })
-        });
-        const data = await res.json();
-
-        if (data.saved) {
-          icon.classList.replace("bi-bookmark", "bi-bookmark-fill");
-          icon.style.color = "#228B22";
-        } else {
-          icon.classList.replace("bi-bookmark-fill", "bi-bookmark");
-          icon.style.color = "gray";
-        }
-
-        countEl.textContent = data.totalSaved;
-      }
-    });
-  </script>
-</body>
-</html>`;
-
-
-
-   <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <title>CollegeZ</title>
-      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-      <style>
-        
-
-        .sidebar {
-         width: 60px;
-         background: #f1f1f1;
-         display: flex;
-         flex-direction: column;
-         align-items: center;
-         padding: 1rem 0;
-         position: fixed;
-         top: 0;
-         right: 0;
-         height: 100vh;
-         z-index: 1000;
-         }
-
-       .sidebar .icon {
-         margin-top: auto; // pushes icons to bottom 
-         display: flex;
-         flex-direction: column;
-         gap: 1rem;
-        }      
-        header {
-          background-color: #228B22;
-          color: white;
-          padding: 1rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-        .btnbtn-primary {
-          background-color:#228B22;
-          color:white;
-        }
-        .icon {
-          font-size: 1.8rem;
-          color: white;
-          margin: 1rem 0;
-        }
-      </style>
-    </head>
-    <body>
-      <header>
-        <h1 class="m-0">CollegenZ</h1>
-        <input type="text" class="form-control w-25" placeholder="Search...">
-      </header>
-
-      <main class="d-flex" style="margin-top: 50px;">
-        <div class="container me-auto">
-          <!-- Join With Us Section -->
-          <div class="card mb-4 p-3 d-flex flex-row justify-content-between align-items-center">
-            <div>
-              <h2>Hi ${login ? login.name : "Guest"}</h2>
-              <p>Represent your college with us</p>
-              <button class="btnbtn-primary">Join Now</button>
-            </div>
-            <div style="font-size: 2rem;">👤➕</div>
-          </div>
-
-          <hr>
-    `;
-
-
-      posts.forEach(p => {
-      html += `
-    <div class="card mb-3 p-3 text-center" style="max-width: 700px; margin: 20px auto;">
-      <strong>${p.userEmail}</strong>
-      
-      <div class="my-3">
-        <img src="/uploads/${p.imageurl}" class="img-fluid" alt="Post image" />
-      </div>
-      
-      <p>${p.data}</p>
-      
-      <!-- Like & Save buttons -->
-      <div class="mt-3">
-        <button class="btn btn-success btn-sm me-2">Like</button>
-        <button class="btn btn-outline-primary btn-sm save-btn" data-id="${p._id}">Save</button>
-      </div>
-    </div>
-  `;
-});
-
-    // Sidebar + script
-    html += `
-        </div>
-      </main>
-
-      <!-- Sidebar -->
-      <div class="sidebar">
-        <div class="icon">
-          <a href="/view">
-            <img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="50" height="50">
-          </a>
-          <a href="/roadmap">
-            <img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="50" height="50">
-          </a>
-          <a href="/upload">
-            <img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="50" height="50">
-          </a>
-          <a href="/calender">
-            <img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="50" height="50">
-          </a>
-        </div>
-      </div>
-
-      <script>
-        document.querySelectorAll(".save-btn").forEach(button => {
-          button.addEventListener("click", async () => {
-            const postId = button.getAttribute("data-id");
-            try {
-              const res = await fetch("/save/" + postId, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" }
-              });
-              const data = await res.json();
-              alert(data.message || "Post saved!");
-            } catch (err) {
-              console.error("Error saving post:", err);
-            }
-          });
-        });
-      </script>
-    </body>
-    </html>*/
     
 
     res.send(html);
