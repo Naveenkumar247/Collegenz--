@@ -16,12 +16,42 @@ const MongoStore = require("connect-mongo");
 
 
 // Session Setup
-app.use(session({
+/*app.use(session({
   secret: process.env.SESSION_SECRET || "mysecret",
   resave: false,
   saveUninitialized: false,
 }));
 
+// Session setup
+app.use(session({
+  secret: process.env.SESSION_SECRET || "your-secret-key",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl:"mongodb+srv://naveen:naveen1234@mongodb.wypdxsg.mongodb.net/?retryWrites=true&w=majority&appName=Mongodb>",
+    ttl: 24 * 60 * 60, // 1 day
+  }),
+  cookie: {
+    maxAge: 24 * 60 * 60 * 1000, // 1 day
+    secure: false,
+    httpOnly: true
+  }
+}));*/
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || "your-secret-key",
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: "mongodb+srv://naveen:naveen1234@mongodb.wypdxsg.mongodb.net/?retryWrites=true&w=majority",
+    ttl: 24 * 60 * 60, // 1 day
+  }),
+  cookie: {
+    maxAge: 24 * 60 * 60 * 1000, // 1 day
+    secure: false,
+    httpOnly: true
+  }
+}));
 
 // MongoDB Connection
 mongoose.connect(uri, {
@@ -71,7 +101,7 @@ const AdminSchema = new mongoose.Schema({
 },
 
   saves: { type: Number, default: 0 }, 
-  savedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "logins"}]
+  savedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "Users"}]
 });
 const Post = mongoose.model("Users", AdminSchema);
 
@@ -201,10 +231,20 @@ router.post("/signin", async (req, res) => {
 });
 
 	
-// Session Schema
+/*const SessionSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "logins", required: true },
+  email: { type: String, required: true },
+  sessionId: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date }
+});
+
+const Session = mongoose.model("Session", SessionSchema);*/
+
 const SessionSchema = new mongoose.Schema({
-  name:{type: String, required:true },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "genz", required: true }, // adjust model name if different
+  name: { type: String, required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "logins", required: true },
   email: { type: String, required: true },
   sessionId: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
@@ -266,7 +306,7 @@ router.post("/save/:id", async (req, res) => {
   });
 
 // Session setup
-app.use(session({
+/*app.use(session({
   secret: process.env.SESSION_SECRET || "your-secret-key",
   resave: false,
   saveUninitialized: false,
@@ -279,10 +319,27 @@ app.use(session({
     secure: false,
     httpOnly: true
   }
-}));
+}));*/
 
 // Routes
 //app.use("/auth", authRoutes);
+
+app.use(async (req, res, next) => {
+  if (req.session.userId) {
+    // Fetch the user from the genz collection
+    const user = await genz.findById(req.session.userId);
+
+    // Fetch the latest session record for this user (optional)
+    const loginSession = await Session.findOne({ userId: req.session.userId }).sort({ createdAt: -1 });
+
+    res.locals.currentUser = user || null;
+    res.locals.loginSession = loginSession || null;
+  } else {
+    res.locals.currentUser = null;
+    res.locals.loginSession = null;
+  }
+  next();
+});
 
 
 app.post("/posts/:id/like", async (req, res) => {
@@ -473,31 +530,60 @@ router.get("/calender", async (req, res) => {
   }
 });
 // -------------------------
+/*router.post("/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const lowerEmail = email.toLowerCase();
+
+    const user = await genz.findOne({ email: lowerEmail });
+    if (!user) return res.status(400).send("User not found");
+
+    const isMatch = await bcryptjs.compare(password, user.password);
+    if (!isMatch) return res.status(400).send("Invalid credentials");
+
+    // Save session
+    req.session.userId = user._id;
+    req.session.username = user.name;
+    req.session.email = user.email;
+
+    req.session.save(() => res.redirect("/view"));
+  } catch (err) {
+    console.error("Login error:", err);
+    res.redirect("/signin");
+  }
+});*/
+
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     const lowerEmail = email.toLowerCase();
 
-    // 1️⃣ Find user
     const user = await genz.findOne({ email: lowerEmail });
     if (!user) return res.status(400).send("User not found");
 
-    // 2️⃣ Compare password
     const isMatch = await bcryptjs.compare(password, user.password);
     if (!isMatch) return res.status(400).send("Invalid credentials");
 
-    // 3️⃣ Save session
+    // Save to express-session
     req.session.userId = user._id;
     req.session.username = user.name;
     req.session.email = user.email;
 
+    // Save to custom session collection
+    await Session.create({
+      name: user.name,
+      userId: user._id,
+      email: user.email,
+      sessionId: req.session.id,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+    });
+
     req.session.save(() => {
       res.redirect("/view");
-      
     });
   } catch (err) {
+    console.error("Login error:", err);
     res.redirect("/signin");
-    
   }
 });
 
@@ -520,7 +606,9 @@ app.get("/logout", (req, res) => {
 router.get("/view", async (req, res) => {
   try {
     const posts = await Post.find().sort({ createdAt: -1 });
-    const login = await Session.findOne().sort({ createdAt: -1 }); // latest login
+   // const login = await Session.findOne().sort({ createdAt: -1 });
+    const login = res.locals.loginSession;       // ✅ latest session
+    const currentUser = res.locals.currentUser; // ✅ user info
 
     let html = `
 
