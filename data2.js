@@ -15,28 +15,6 @@ const MongoStore = require("connect-mongo");
 //const authRoutes = require("./routes/auth");
 
 
-// Session Setup
-/*app.use(session({
-  secret: process.env.SESSION_SECRET || "mysecret",
-  resave: false,
-  saveUninitialized: false,
-}));
-
-// Session setup
-app.use(session({
-  secret: process.env.SESSION_SECRET || "your-secret-key",
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl:"mongodb+srv://naveen:naveen1234@mongodb.wypdxsg.mongodb.net/?retryWrites=true&w=majority&appName=Mongodb>",
-    ttl: 24 * 60 * 60, // 1 day
-  }),
-  cookie: {
-    maxAge: 24 * 60 * 60 * 1000, // 1 day
-    secure: false,
-    httpOnly: true
-  }
-}));*/
 
 app.use(session({
   secret: process.env.SESSION_SECRET || "your-secret-key",
@@ -135,31 +113,38 @@ const userSchema = new mongoose.Schema({
 const genz  = mongoose.model("logins", userSchema);
 
 // POST form handler
+function requireLogin(req, res, next) {
+  if (!res.locals.currentUser) {
+    return res.redirect('/login');
+  }
+  next();
+}
+
 router.post('/submit', upload.single("imageurl"), async (req, res) => {
-    const { data, event_date } = req.body;
-    const imageurl = req.file ? req.file.filename : null;
-    const userEmail = req.session.userEmail;  // ✅ comes automatically from login
+  const { data, event_date } = req.body;
+  const imageurl = req.file ? req.file.filename : null;
+  const userEmail = res.locals.currentUser?.email || null; // ✅ from logged-in user
 
-    if (!data || !userEmail) {
-        return res.send("<h3>No data received</h3>");
-    }
+  if (!data || !userEmail) {
+    return res.send("<h3>No data or user info received</h3>");
+  }
 
-    try {
-        const newUser = new Post({
-            data,
-            imageurl,
-            event_date,
-            userEmail   // ✅ saved automatically
-        });
+  try {
+    const newPost = new Post({
+      data,
+      imageurl,
+      event_date,
+      userEmail, // ✅ automatically linked to logged-in user
+    });
 
-        await newUser.save();
-        res.redirect('/view');
-    } catch (err) {
-        console.error("✘ Save failed:", err.message);
-        res.send("Error saving to database");
-    }
+    await newPost.save();
+    console.log("✔ Post saved successfully!");
+    res.redirect('/view');
+  } catch (err) {
+    console.error("✘ Save failed:", err.message);
+    res.send("Error saving to database");
+  }
 });
-
 
 // Routes
 
@@ -231,17 +216,6 @@ router.post("/signin", async (req, res) => {
 });
 
 	
-/*const SessionSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "logins", required: true },
-  email: { type: String, required: true },
-  sessionId: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date }
-});
-
-const Session = mongoose.model("Session", SessionSchema);*/
-
 const SessionSchema = new mongoose.Schema({
   name: { type: String, required: true },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "logins", required: true },
@@ -305,21 +279,6 @@ router.post("/save/:id", async (req, res) => {
   }
   });
 
-// Session setup
-/*app.use(session({
-  secret: process.env.SESSION_SECRET || "your-secret-key",
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl:"mongodb+srv://naveen:naveen1234@mongodb.wypdxsg.mongodb.net/?retryWrites=true&w=majority&appName=Mongodb>",
-    ttl: 24 * 60 * 60, // 1 day
-  }),
-  cookie: {
-    maxAge: 24 * 60 * 60 * 1000, // 1 day
-    secure: false,
-    httpOnly: true
-  }
-}));*/
 
 // Routes
 //app.use("/auth", authRoutes);
@@ -529,62 +488,64 @@ router.get("/calender", async (req, res) => {
     res.status(500).send("Server error");
   }
 });
-// -------------------------
-/*router.post("/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const lowerEmail = email.toLowerCase();
 
-    const user = await genz.findOne({ email: lowerEmail });
-    if (!user) return res.status(400).send("User not found");
-
-    const isMatch = await bcryptjs.compare(password, user.password);
-    if (!isMatch) return res.status(400).send("Invalid credentials");
-
-    // Save session
-    req.session.userId = user._id;
-    req.session.username = user.name;
-    req.session.email = user.email;
-
-    req.session.save(() => res.redirect("/view"));
-  } catch (err) {
-    console.error("Login error:", err);
-    res.redirect("/signin");
-  }
-});*/
-
+// LOGIN ROUTE
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     const lowerEmail = email.toLowerCase();
 
+    // Step 1: Check user exists
     const user = await genz.findOne({ email: lowerEmail });
-    if (!user) return res.status(400).send("User not found");
+    if (!user) {
+      return res.status(400).send("User not found");
+    }
 
+    // Step 2: Compare passwords
     const isMatch = await bcryptjs.compare(password, user.password);
-    if (!isMatch) return res.status(400).send("Invalid credentials");
+    if (!isMatch) {
+      return res.status(400).send("Invalid credentials");
+    }
 
-    // Save to express-session
+    // Step 3: Store session data in express-session
     req.session.userId = user._id;
     req.session.username = user.name;
     req.session.email = user.email;
 
-    // Save to custom session collection
-    await Session.create({
+    // Step 4: Save to your custom Session collection
+    const newSession = await Session.create({
       name: user.name,
       userId: user._id,
       email: user.email,
       sessionId: req.session.id,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // expires in 24h
     });
 
+    // Step 5: Update res.locals to use in same request (optional immediate use)
+    res.locals.loginSession = newSession;
+    res.locals.currentUser = user;
+
+    // Step 6: Redirect to /view page
     req.session.save(() => {
       res.redirect("/view");
     });
+
   } catch (err) {
-    console.error("Login error:", err);
-    res.redirect("/signin");
+    console.error("❌ Login error:", err);
+    res.status(500).send("Login failed. Please try again.");
   }
+});
+
+// Middleware to attach current user info to res.locals
+app.use(async (req, res, next) => {
+  if (req.session && req.session.userId) {
+    res.locals.currentUser = await genz.findById(req.session.userId);
+    res.locals.loginSession = await Session.findOne({ sessionId: req.session.id });
+  } else {
+    res.locals.currentUser = null;
+    res.locals.loginSession = null;
+  }
+  next();
 });
 
 // Protected Route
@@ -602,16 +563,18 @@ app.get("/logout", (req, res) => {
     });
 });
 
+
 // VIEW: all data route
 router.get("/view", async (req, res) => {
   try {
     const posts = await Post.find().sort({ createdAt: -1 });
-   // const login = await Session.findOne().sort({ createdAt: -1 });
-    const login = res.locals.loginSession;       // ✅ latest session
-    const currentUser = res.locals.currentUser; // ✅ user info
 
+   
+// ✅ Detect current login status
+const currentUser = res.locals.currentUser ?? null;     // User info if logged in
+const loginSession = res.locals.loginSession ?? null;   // Session info if logged in
+const isLoggedIn = Boolean(currentUser);                // true if logged in
     let html = `
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -648,8 +611,8 @@ router.get("/view", async (req, res) => {
       align-items: center;
     }
     .btnbtn-primary {
-      background-color:#228B22;
-      color:white;
+      background-color: #228B22;
+      color: white;
     }
     .icon {
       font-size: 1.8rem;
@@ -670,89 +633,70 @@ router.get("/view", async (req, res) => {
       <!-- Join With Us Section -->
       <div class="card mb-4 p-3 d-flex flex-row justify-content-between align-items-center">
         <div>
-          <h2>Hi ${login ? login.name : "Guest"}</h2>
-          <p>Represent your college with us</p>
-          <button class="btn btn-primary">Join Now</button>
+          <h2>Welcome ${isLoggedIn ? currentUser.name : ""}</h2>
+          <p>${isLoggedIn ? "Welcome back! Explore new posts and connect with others." : "Represent your college with us"}</p>
+          ${isLoggedIn ? `
+            <a href="/upload" class="btn btn-success">Create Post</a>
+          ` : `
+            <a href="/login" class="btn btn-primary">Join Now</a>
+          `}
         </div>
         <div style="font-size: 2rem;">👤➕</div>
       </div>
 
       <hr>`;
 
-posts.forEach(p => {
-  html += `
-    <div class="card mb-3 p-3 text-center" style="max-width: 700px; margin: 20px auto;">
-      <strong>${p.userEmail}</strong>
+    // 🔹 Display all posts
+    posts.forEach(p => {
+      html += `
+        <div class="card mb-3 p-3 text-center" style="max-width: 700px; margin: 20px auto;">
+          <strong>${p.userEmail}</strong>
 
-      <div class="my-3">
-        <img src="/uploads/${p.imageurl}" class="img-fluid" alt="Post image" />
-      </div>
+          <div class="my-3">
+            <img src="/uploads/${p.imageurl}" class="img-fluid" alt="Post image" />
+          </div>
 
-      <p>${p.data}</p>
+          <p>${p.data}</p>
 
-      <!-- Like & Save buttons with counts -->
-      <div class="mt-3 d-flex justify-content-center align-items-center gap-4">
-        <!-- Like -->
-        <button class="btn btn-link btn-sm like-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;">
-          <i class="bi bi-heart"></i>
-        </button>
-        <span class="like-count" id="like-count-${p._id}">${p.likes || 0}</span>
+          <!-- Like & Save buttons with counts -->
+          <div class="mt-3 d-flex justify-content-center align-items-center gap-4">
+            <button class="btn btn-link btn-sm like-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;" ${!isLoggedIn ? "disabled" : ""}>
+              <i class="bi bi-heart"></i>
+            </button>
+            <span class="like-count" id="like-count-${p._id}">${p.likes || 0}</span>
 
-        <!-- Save -->
-        <button class="btn btn-link btn-sm save-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;">
-          <i class="bi bi-bookmark"></i>
-        </button>
-        <span class="save-count" id="save-count-${p._id}">${p.saves || 0}</span>
-      </div>
-    </div>
-  `;
-});
+            <button class="btn btn-link btn-sm save-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;" ${!isLoggedIn ? "disabled" : ""}>
+              <i class="bi bi-bookmark"></i>
+            </button>
+            <span class="save-count" id="save-count-${p._id}">${p.saves || 0}</span>
+          </div>
+        </div>
+      `;
+    });
 
-// Sidebar + scripts
-html += `
+    // 🔹 Sidebar & Scripts
+    html += `
     </div>
   </main>
 
   <!-- Sidebar -->
   <div class="sidebar">
     <div class="icon">
-      <a href="/view">
-        <img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="50" height="50">
-      </a>
-      <a href="/roadmap">
-        <img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="50" height="50">
-      </a>
-      <a href="/upload">
-        <img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="50" height="50">
-      </a>
-      <a href="/calender">
-        <img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="50" height="50">
-      </a>
+      <a href="/view"><img src="/uploads/1755615628125-1000094854.png" alt="Icon" width="50" height="50"></a>
+      <a href="/login"><img src="/uploads/1755616091422-1000094853.jpg" alt="Icon" width="50" height="50"></a>
+      <a href="/upload"><img src="/uploads/1755616247244-1000094855.jpg" alt="Icon" width="50" height="50"></a>
+      <a href="/calender"><img src="/uploads/1755616348668-1000095317.jpg" alt="Icon" width="50" height="50"></a>
     </div>
   </div>
 
   <script>
-
-         document.querySelectorAll(".save-btn").forEach(button => {
-          button.addEventListener("click", async () => {
-            const postId = button.getAttribute("data-id");
-            try {
-              const res = await fetch("/save/" + postId, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" }
-              });
-              const data = await res.json();
-              alert(data.message || "Post saved!");
-            } catch (err) {
-              console.error("Error saving post:", err);
-            }
-          });
-        });
-    const currentUserId = "${login ? login._id : ""}"; // 👈 inject logged-in userId here
+    const currentUserId = "${isLoggedIn ? currentUser._id : ""}";
 
     document.addEventListener("click", async function(e) {
-      // Like button
+      // ✅ Like button
       if (e.target.closest(".like-btn")) {
+        if (!currentUserId) return alert("Please login to like posts!");
+
         const btn = e.target.closest(".like-btn");
         const postId = btn.getAttribute("data-id");
         const icon = btn.querySelector("i");
@@ -775,46 +719,48 @@ html += `
         countEl.textContent = data.likes;
       }
 
-      // Save button
-if (e.target.closest(".save-btn")) {
-  const btn = e.target.closest(".save-btn");
-  const postId = btn.getAttribute("data-id");
-  const icon = btn.querySelector("i");
-  const countEl = document.getElementById("save-count-" + postId);
+      // ✅ Save button
+      if (e.target.closest(".save-btn")) {
+        if (!currentUserId) return alert("Please login to save posts!");
 
-  const res = await fetch("/save/" + postId, { // ✅ fixed route here
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId: currentUserId })
-  });
+        const btn = e.target.closest(".save-btn");
+        const postId = btn.getAttribute("data-id");
+        const icon = btn.querySelector("i");
+        const countEl = document.getElementById("save-count-" + postId);
 
-  const data = await res.json();
+        const res = await fetch("/save/" + postId, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: currentUserId })
+        });
 
-  if (data.saved) {  // or data.success if backend sends that
-    icon.classList.replace("bi-bookmark", "bi-bookmark-fill");
-    icon.style.color = "#228B22";
-  } else {
-    icon.classList.replace("bi-bookmark-fill", "bi-bookmark");
-    icon.style.color = "gray";
-  }
+        const data = await res.json();
 
-  if (data.saves !== undefined) {
-    countEl.textContent = data.saves;
-  }
-}
+        if (data.saved) {
+          icon.classList.replace("bi-bookmark", "bi-bookmark-fill");
+          icon.style.color = "#228B22";
+        } else {
+          icon.classList.replace("bi-bookmark-fill", "bi-bookmark");
+          icon.style.color = "gray";
+        }
+
+        if (data.saves !== undefined) {
+          countEl.textContent = data.saves;
+        }
+      }
     });
   </script>
 </body>
-</html>`;
-    
+</html>
+`;
 
     res.send(html);
+
   } catch (err) {
     console.error("❌ Fetch failed:", err.message);
     res.status(500).send("Failed to load data");
   }
 });
-
 
 // Connect the router
 app.use("/", router);
