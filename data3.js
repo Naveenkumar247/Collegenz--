@@ -210,4 +210,4 @@ router.get("/view", async (req, res) => {
 app.use("/", router);
 
 // Start server
-app.listen(3000, () => console.log("🚀 Server running on port 3000"));
+app.listen(3000, () => console.log("🚀 Server running on port 3000"

@@ -585,13 +585,13 @@ const isLoggedIn = Boolean(currentUser);                // true if logged in
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  
-  <style>
-/* === Header === */
+  /*<style>
+    
+    /* === Header === 
 header {
   background-color: #228B22;
   color: white;
-  padding: 1rem 1.2rem;
+  padding: 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -599,10 +599,9 @@ header {
   top: 0;
   z-index: 1100;
   margin-right: 60px; /* space for desktop sidebar */
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 
-/* === Sidebar (Default: Desktop layout) === */
+/* === Sidebar (Default: Desktop layout) === 
 .sidebar {
   width: 60px;
   background: #f1f1f1;
@@ -628,30 +627,21 @@ header {
   margin-top: 2rem;
 }
 
-.sidebar img {
-  width: 45px;
-  height: 45px;
+/*.sidebar img {
+  width: 40px;
+  height: 40px;
   transition: transform 0.2s ease;
 }
 
-/* Slight zoom effect on hover */
 .sidebar img:hover {
   transform: scale(1.1);
-}
+}*/
 
-/* === Tablet Size (medium screens) === */
-@media (max-width: 992px) {
-  .sidebar img {
-    width: 40px;
-    height: 40px;
-  }
-}
-
-/* === Mobile Layout: Sidebar becomes bottom nav === */
+/* === Mobile Layout: Sidebar becomes bottom nav === 
 @media (max-width: 768px) {
   .sidebar {
     width: 100%;
-    height: 55px; /* slightly smaller bottom nav */
+    height: 65px;
     flex-direction: row;
     justify-content: center;
     align-items: center;
@@ -659,7 +649,7 @@ header {
     top: auto;
     right: 0;
     left: 0;
-    background: #f1f1f1;
+    background: #ffffff;
     border-top: 1px solid #ddd;
     box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
   }
@@ -668,34 +658,196 @@ header {
     flex-direction: row;
     justify-content: space-around;
     width: 100%;
-    gap: 2rem; /* more spacing between icons */
+    gap: 1.5rem;
     margin-top: 0;
-    padding: 0 0.5rem; /* side padding */
   }
 
-  .sidebar img {
-    width: 35px; /* smaller icons for mobile */
+  /*.sidebar img {
+    width: 35px;
     height: 35px;
   }
 
   header {
     margin-right: 0;
-    margin-bottom: 65px; /* space for bottom nav */
-    padding: 0.8rem 1rem; /* slightly smaller header */
+    margin-bottom: 70px; /* space for bottom nav
+  }
+}
+/* === Default (Desktop) === 
+.sidebar img {
+  width: 45px;
+  height: 45px;
+  transition: transform 0.2s ease;
+}
+
+/* Slight zoom effect on hover /
+.sidebar img:hover {
+  transform: scale(1.1);
+}
+
+/* === Tablet Size (medium screens) === 
+@media (max-width: 992px) {
+  .sidebar img {
+    width: 40px;
+    height: 40px;
   }
 }
 
-/* === Extra Small Screens (very small phones) === */
+/* === Mobile Size (small screens) === /
+@media (max-width: 768px) {
+  .sidebar img {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* === Extra Small Screens (very small phones) === 
 @media (max-width: 480px) {
+  .sidebar img {
+    width: 28px;
+    height: 28px;
+  }
+}
+  </style>*/
+
+<style>
+  /* === Global Reset === */
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: "Poppins", sans-serif;
+    margin: 0;
+    background: #fafafa;
+  }
+
+  /* === Header === */
+  header {
+    background-color: #228B22;
+    color: white;
+    padding: 0.8rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 1100;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  header input {
+    max-width: 300px;
+  }
+
+  /* === Sidebar (Desktop) === */
+  .sidebar {
+    width: 70px;
+    background: #f9f9f9;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 1rem 0;
+    position: fixed;
+    right: 0;
+    top: 0;
+    height: 100vh;
+    z-index: 1000;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+  }
+
   .sidebar .icon {
-    flex-wrap: wrap; /* allow icons to wrap if too many */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.2rem;
+    margin-top: 3rem;
   }
 
   .sidebar img {
-    width: 24px;
-    height: 24px;
+    width: 40px;
+    height: 40px;
+    transition: transform 0.2s ease;
   }
-}
+
+  .sidebar img:hover {
+    transform: scale(1.1);
+  }
+
+  /* === Main Content === */
+  main {
+    margin-right: 90px; /* leave space for sidebar */
+    padding: 1rem;
+  }
+
+  .card {
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  }
+
+  /* === Mobile Responsive === */
+  @media (max-width: 768px) {
+    header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    header input {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    /* Sidebar becomes bottom nav */
+    .sidebar {
+      width: 100%;
+      height: 60px;
+      flex-direction: row;
+      justify-content: space-around;
+      align-items: center;
+      position: fixed;
+      bottom: 0;
+      top: auto;
+      left: 0;
+      right: 0;
+      box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+      border-top: 1px solid #ddd;
+      padding: 0.5rem 0;
+    }
+
+    .sidebar .icon {
+      flex-direction: row;
+      gap: 1rem;
+      margin: 0;
+      width: 100%;
+      justify-content: space-around;
+    }
+
+    .sidebar img {
+      width: 30px;
+      height: 30px;
+    }
+
+    main {
+      margin-right: 0;
+      margin-bottom: 80px; /* space for bottom nav */
+    }
+  }
+
+  @media (max-width: 480px) {
+    header h1 {
+      font-size: 1.2rem;
+    }
+
+    .sidebar img {
+      width: 26px;
+      height: 26px;
+    }
+  }
 </style>
 </head>
 
@@ -820,12 +972,7 @@ posts.forEach((p, index) => {
     <div class="card mb-3 p-3 text-center" style="max-width: 700px; margin: 20px auto; border-radius: 15px;">
       <strong>${p.userEmail}</strong>
       <div class="my-3">${carousel}</div>
-      <p class="mt-3 post-content" id="post-content-${index}">
-  ${p.data.length > 200 ? p.data.slice(0, 200) + '...' : p.data}
-</p>
-${p.data.length > 200 ? `
-  <button class="btn btn-link p-0 see-more" data-index="${index}" style="color:#0d6efd;">See More</button>
-` : ''}
+      <p class="mt-3">${p.data}</p>
 
       <!-- Like & Save Buttons -->
       <div class="mt-3 d-flex justify-content-center align-items-center gap-4">
@@ -919,21 +1066,6 @@ ${p.data.length > 200 ? `
         }
       }
     });
-      document.addEventListener('click', function (e) {
-  if (e.target.classList.contains('see-more')) {
-    const index = e.target.getAttribute('data-index');
-    const contentEl = document.getElementById(`post-content-${index}`);
-    const fullText = posts[index].data;
-
-    if (e.target.textContent === 'See More') {
-      contentEl.textContent = fullText;
-      e.target.textContent = 'See Less';
-    } else {
-      contentEl.textContent = fullText.slice(0, 200) + '...';
-      e.target.textContent = 'See More';
-    }
-  }
-});
   </script>
 </body>
 </html>
