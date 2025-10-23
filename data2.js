@@ -12,7 +12,6 @@ const app = express();
 const cron = require("node-cron");
 const nodemailer = require("nodemailer");
 const MongoStore = require("connect-mongo");
-//const authRoutes = require("./routes/auth");
 
 
 
@@ -681,7 +680,7 @@ header {
   header {
     margin-right: 0;
     margin-bottom: 65px; /* space for bottom nav */
-    padding: 0.8rem 1rem; /* slightly smaller header */
+    padding: 0.8rem 1rem; /* slightly smaller header*/ 
   }
 }
 
@@ -820,13 +819,7 @@ posts.forEach((p, index) => {
     <div class="card mb-3 p-3 text-center" style="max-width: 700px; margin: 20px auto; border-radius: 15px;">
       <strong>${p.userEmail}</strong>
       <div class="my-3">${carousel}</div>
-      <p class="mt-3 post-content" id="post-content-${index}">
-  ${p.data.length > 200 ? p.data.slice(0, 200) + '...' : p.data}
-</p>
-${p.data.length > 200 ? `
-  <button class="btn btn-link p-0 see-more" data-index="${index}" style="color:#0d6efd;">See More</button>
-` : ''}
-
+      <p>${p.data}</p>
       <!-- Like & Save Buttons -->
       <div class="mt-3 d-flex justify-content-center align-items-center gap-4">
         <button class="btn btn-link btn-sm like-btn" data-id="${p._id}" style="color: gray; font-size: 1.2rem;" ${!isLoggedIn ? "disabled" : ""}>
@@ -851,10 +844,10 @@ ${p.data.length > 200 ? `
   <!-- Sidebar / Bottom Navigation -->
 <div class="sidebar">
   <div class="icon">
-    <a href="/view"><img src="/uploads/home.png" alt="Home" /*width="40" height="40"*/></a>
-    <a href="/login"><img src="/uploads/settings.png" alt="Settings" /*width="40" height="40"*/></a>
-    <a href="/upload"><img src="/uploads/add.png" alt="Add" /*width="40" height="40"*/></a>
-    <a href="/calender"><img src="/uploads/calender.png" alt="Calendar" /*width="40" height="40"*/></a>
+    <a href="/view"><img src="/uploads/home.png" alt="Home" ></a>
+    <a href="/login"><img src="/uploads/settings.png" alt="Settings" ></a>
+    <a href="/upload"><img src="/uploads/add.png" alt="Add" ></a>
+    <a href="/calender"><img src="/uploads/calender.png" alt="Calendar" ></a>
   </div>
 </div>
 
@@ -919,22 +912,31 @@ ${p.data.length > 200 ? `
         }
       }
     });
-      document.addEventListener('click', function (e) {
-  if (e.target.classList.contains('see-more')) {
-    const index = e.target.getAttribute('data-index');
-    const contentEl = document.getElementById(`post-content-${index}`);
-    const fullText = posts[index].data;
+      
+    
+  document.addEventListener('click', function (e) {
+    if (e.target.classList.contains('see-more')) {
 
-    if (e.target.textContent === 'See More') {
-      contentEl.textContent = fullText;
-      e.target.textContent = 'See Less';
-    } else {
-      contentEl.textContent = fullText.slice(0, 200) + '...';
-      e.target.textContent = 'See More';
+      // 🔹 Get index from data attribute
+      const index = e.target.getAttribute('data-index');
+
+      // 🔹 Dynamically access the post content element
+      const contentEl = document.getElementById("post-content-" + index);
+
+      // 🔹 Full content text for this post
+      const fullText = posts[index].data;
+
+      // 🔹 Toggle logic (See More / See Less)
+      if (e.target.textContent === 'See More') {
+        contentEl.textContent = fullText;
+        e.target.textContent = 'See Less';
+      } else {
+        contentEl.textContent = fullText.slice(0, 200) + '...';
+        e.target.textContent = 'See More';
+      }
     }
-  }
-});
-  </script>
+  });
+</script>
 </body>
 </html>
 `;
@@ -946,6 +948,7 @@ ${p.data.length > 200 ? `
     res.status(500).send("Failed to load data");
   }
 });
+
 
 // Connect the router
 app.use("/", router);
